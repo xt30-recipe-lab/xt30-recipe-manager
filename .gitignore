@@ -1,0 +1,49 @@
+# Local checkpoints and downloaded research repositories
+/checkpoints/
+/research/
+/docs/reference/
+
+# Camera-specific output: never publish data read from a real device
+/xt30-probe/phase2-inventory/
+/xt30-probe/rawconv-scan/
+/xt30-probe/rapports/
+/xt30-probe/validation/
+/xt30-probe/data/
+/xt30-probe/probe-session.log
+/xt30-probe/crash.log
+/xt30-probe/xt30_report.json
+/xt30-probe/xt30_report.txt
+
+# Third-party recipe corpus and photography are not distributed
+/xt30-probe/library/
+
+# Experimental write utility is intentionally outside the read-only release
+/xt30-probe/Tools/BackupWrite/
+
+# Build and release artifacts
+*.exe
+*.pdb
+*.zip
+*.dat
+*.RAF
+*.raf
+/dist/
+/bin/
+/obj/
+
+# Duplicate design source files; canonical runtime assets live in Assets/
+/xt30-probe/charte graphique.png
+/xt30-probe/design de l'appli.png
+/xt30-probe/interface fuji a l'interieur de l'appareil.jfif
+/xt30-probe/logo app
+/xt30-probe/logo texte fujifilm.png
+/xt30-probe/photo du fuji x-t30 sur fond blanc a détourer.jpg
+
+# Editor and operating-system files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+.DS_Store
