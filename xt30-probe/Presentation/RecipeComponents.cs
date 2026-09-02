@@ -100,7 +100,11 @@ namespace Xt30Probe.Presentation
             for(int i=0;i<_cards.Count;i++)_cards[i].SetBounds((i%columns)*(width+16),(i/columns)*(height+22),width,height);
             if(!SingleRow)Height=((_cards.Count+columns-1)/columns)*(height+22);
         }
-        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);if(_cards.Count==0){Theme.TextAt(e.Graphics,Strings.T("No recipes found"),20,true,Theme.Text,new Rectangle(20,35,Width-40,35));Theme.TextAt(e.Graphics,Strings.T("Try a different search or filter, or create a new recipe."),14,false,Theme.Muted,new Rectangle(20,75,Width-40,30));}}
+        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);if(_cards.Count==0){Theme.TextAt(e.Graphics,Strings.T(EmptyTitle),20,true,Theme.Text,new Rectangle(20,35,Width-40,35));Theme.Lines(e.Graphics,Strings.T(EmptyHint),14,Theme.Muted,new Rectangle(20,72,Width-40,60));}}
+        // Message affiché quand rien ne correspond : il dépend du filtre en cours,
+        // « aucune recette » n'aide pas quand on vient de choisir Vidéo.
+        public string EmptyTitle="No recipes found";
+        public string EmptyHint="Try a different search or filter, or create a new recipe.";
     }
     public sealed class CompatibilityBadge : Control
     {

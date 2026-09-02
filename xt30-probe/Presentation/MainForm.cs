@@ -75,7 +75,9 @@ namespace Xt30Probe.Presentation
             _overview.ScanButton.Click+=delegate{Camera.Scan(Library.ExtendedScan);};_overview.TxtButton.Click+=delegate{OpenReport("xt30_report.txt");};_overview.JsonButton.Click+=delegate{OpenReport("xt30_report.json");};_overview.FolderButton.Click+=delegate{OpenFolder(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"rapports"));};
             _recent.ViewAll.Click+=delegate{SwitchPage("Recipes");};_recent.Grid.SetRecipes(Library.Recipes.Take(5).ToList());
             _recent.Grid.OpenRecipe+=OpenRecipe;_recent.Grid.FavoriteRequested+=ToggleFavorite;_recipes.OpenRecipe+=OpenRecipe;_recipes.FavoriteRequested+=ToggleFavorite;
-            _recipes.NewRecipe.Click+=delegate{EditRecipe(null);};_custom.OpenRecipe+=OpenRecipe;_slots.OpenRecipe+=OpenRecipe;_packs.OpenRecipe+=OpenRecipe;
+            // Créer depuis le mode Vidéo produit une recette vidéo : le mode choisi
+            // sur la page est celui qu'on retrouve dans l'éditeur.
+            _recipes.NewRecipe.Click+=delegate{EditRecipe(null,_recipes.VideoMode);};_custom.OpenRecipe+=OpenRecipe;_slots.OpenRecipe+=OpenRecipe;_packs.OpenRecipe+=OpenRecipe;
             _help.Click+=delegate{MessageBox.Show(this,"MENU → SET UP → CONNECTION SETTING → USB CONNECTION MODE\n\nSelect USB RAW CONV./BACKUP RESTORE, then turn the camera off and on.\n\nThe current USB mode is shown only when confirmed by a camera report. All camera operations remain read-only.","Quick Help",MessageBoxButtons.OK,MessageBoxIcon.Information);};
             _menu.Click+=delegate{ContextMenuStrip menu=new ContextMenuStrip();menu.Items.Add("Open reports folder",null,delegate{OpenFolder(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"rapports"));});menu.Items.Add("About XT30 Recipe Manager",null,delegate{MessageBox.Show(this,"XT30 Recipe Manager 1.0.0\nWindows companion · Read only\n\nLocal recipe examples and slot assignments are demonstration data. Camera writing is disabled.","About");});menu.Closed+=delegate{menu.Dispose();};menu.Show(_menu,new Point(0,_menu.Height));};
             _tips.SetToolTip(_overview,"Model, firmware and protocol come from the last matching scan. A connected USB device does not confirm the camera USB mode.");
@@ -201,14 +203,15 @@ namespace Xt30Probe.Presentation
             using(RecipeDetailForm detail=new RecipeDetailForm(recipe,Library))
             {detail.EditRequested+=delegate{detail.Close();EditRecipe(recipe);};detail.ShowDialog(this);}
         }
-        public void EditRecipe(Recipe original)
+        public void EditRecipe(Recipe original){EditRecipe(original,original!=null&&original.IsVideo);}
+        public void EditRecipe(Recipe original,bool video)
         {
-            using(RecipeEditorForm editor=new RecipeEditorForm(original))
+            using(RecipeEditorForm editor=new RecipeEditorForm(original,video))
             {
                 if(editor.ShowDialog(this)!=DialogResult.OK)return;
                 try
                 {
-                    if(original==null)Library.Add(editor.Result);else{original.Name=editor.Result.Name;original.Category=editor.Result.Category;original.Cover=editor.Result.Cover;original.Values=editor.Result.Values;Library.Save();}
+                    if(original==null)Library.Add(editor.Result);else{original.Name=editor.Result.Name;original.Category=editor.Result.Category;original.Cover=editor.Result.Cover;original.Kind=editor.Result.Kind;original.Values=editor.Result.Values;Library.Save();}
                     _recipes.RefreshRecipes();_recent.Grid.SetRecipes(Library.Recipes.Take(5).ToList());_custom.Invalidate(true);_slots.Invalidate(true);
                 }
                 catch(Exception ex){MessageBox.Show(this,ex.Message,"Could not save recipe");}

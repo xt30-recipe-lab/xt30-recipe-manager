@@ -244,6 +244,10 @@ namespace Xt30Probe.Presentation
                 // Page Recettes
                 "Search recipes...", "Rechercher une recette...",
                 "New Recipe", "Nouvelle recette",
+                "New video recipe", "Nouvelle recette vidéo",
+                "No video recipe yet", "Aucune recette vidéo pour l'instant",
+                "Press \"New video recipe\" to write one. Movie settings are set by hand in the camera's own menus: the X-T30 does not store them in the C1-C7 banks.",
+                    "Appuyez sur « Nouvelle recette vidéo » pour en écrire une. Les réglages du mode film se saisissent à la main dans les menus du boîtier : le X-T30 ne les range pas dans les banques C1-C7.",
                 "All simulations", "Toutes les simulations",
                 "All", "Toutes",
                 "Compatible", "Compatibles",

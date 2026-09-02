@@ -27,7 +27,9 @@ namespace Xt30Probe.Presentation
             SimulationFilter.Font=Theme.Font(13,false);SimulationFilter.AccessibleName="Film simulation filter";
             ReloadSimulations();
             SimulationFilter.SelectedIndexChanged+=delegate{RefreshRecipes();};
-            string[] filters={"All","Compatible","Favorites","Imported","Local","Photo","Video","B&W","Color","Portrait","Street","Night","Vintage","Cinematic"};
+            // Photo et Vidéo juste après « Toutes » : c'est un mode, pas un filtre
+            // parmi douze. Noyé en fin de rangée, personne ne le trouvait.
+            string[] filters={"All","Photo","Video","Compatible","Favorites","Imported","Local","B&W","Color","Portrait","Street","Night","Vintage","Cinematic"};
             foreach(string filter in filters){ActionButton button=new ActionButton(filter,false){Quiet=true};button.Text=filter;_filters.Add(button);Controls.Add(button);button.Click+=delegate{SetFilter(button.Text);};}
             Controls.Add(ShowMore);ShowMore.Click+=delegate{Grid.ShowMore();PerformLayout();Invalidate();};
             Grid.ShownCountChanged+=delegate{ShowMore.Visible=Grid.HasMore;Invalidate();};
@@ -40,7 +42,20 @@ namespace Xt30Probe.Presentation
             foreach(string sim in _library.Simulations())SimulationFilter.Items.Add(sim);
             SimulationFilter.SelectedIndex=0;
         }
-        public void SetFilter(string filter){_filter=filter;foreach(ActionButton b in _filters){b.Quiet=b.Text!=filter;b.ForeColor=b.Text==filter?Theme.Green:Theme.Muted;b.Invalidate();}RefreshRecipes();}
+        // Le mode vidéo change ce que fait « Nouvelle recette » : on ne demande pas
+        // à l'utilisateur de repasser par une liste déroulante après coup.
+        public bool VideoMode{get{return _filter=="Video";}}
+        public void SetFilter(string filter)
+        {
+            _filter=filter;
+            foreach(ActionButton b in _filters){b.Quiet=b.Text!=filter;b.ForeColor=b.Text==filter?Theme.Green:Theme.Muted;b.Invalidate();}
+            NewRecipe.Text=VideoMode?"New video recipe":"New Recipe";
+            Grid.EmptyTitle=VideoMode?"No video recipe yet":"No recipes found";
+            Grid.EmptyHint=VideoMode
+                ?"Press \"New video recipe\" to write one. Movie settings are set by hand in the camera's own menus: the X-T30 does not store them in the C1-C7 banks."
+                :"Try a different search or filter, or create a new recipe.";
+            RefreshRecipes();
+        }
         // Le premier élément est traduit à l'écran mais reste « toutes » côté requête.
         public void RefreshRecipes(){string sim=SimulationFilter.SelectedIndex<=0?"All simulations":Convert.ToString(SimulationFilter.SelectedItem);Grid.SetRecipes(_library.Query(Search.Input.Text,_filter,sim));PerformLayout();Invalidate();}
         protected override void OnLayout(LayoutEventArgs e)
@@ -472,7 +487,10 @@ namespace Xt30Probe.Presentation
         readonly Dictionary<string,Control> _values=new Dictionary<string,Control>();
         readonly TextBox _name=new TextBox();
         readonly ComboBox _category=new ComboBox();
-        readonly ComboBox _kind=new ComboBox();
+        // Deux boutons plutôt qu'une liste déroulante : le mode doit se voir dès
+        // l'ouverture de l'éditeur, pas se découvrir en dépliant un champ.
+        readonly ActionButton _photoMode=new ActionButton("Photo — camera bank C1-C7",true);
+        readonly ActionButton _videoMode=new ActionButton("Video — movie mode",false);
         readonly Panel _fields=new Panel(){AutoScroll=true};
         readonly Label _summary=new Label();
         readonly Label _bankName=new Label();
@@ -509,9 +527,11 @@ namespace Xt30Probe.Presentation
             }
         }
 
-        public RecipeEditorForm(Recipe original)
+        public RecipeEditorForm(Recipe original):this(original,original!=null&&original.IsVideo){}
+        public RecipeEditorForm(Recipe original,bool video)
         {
             _original=original;_cover=original==null?"pacific":original.Cover;
+            _video=video;
             Text=Strings.T(original==null?"New recipe":"Edit recipe");
             ClientSize=new Size(820,660);MinimumSize=new Size(780,600);StartPosition=FormStartPosition.CenterParent;BackColor=Color.White;Font=Theme.Font(14,false);
             try{Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);}catch(Exception){}
@@ -521,7 +541,16 @@ namespace Xt30Probe.Presentation
                 Font=Theme.Font(12,false),ForeColor=Theme.Muted,Location=new Point(27,50),Size=new Size(700,22)};
             Controls.Add(heading);Controls.Add(sub);
 
-            _fields.SetBounds(26,84,768,470);_fields.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;Controls.Add(_fields);
+            // Sélecteur de mode, en évidence sous le titre.
+            Controls.Add(new Label(){Text=Strings.T("This recipe is for"),Font=Theme.Font(12,false),ForeColor=Theme.Muted,Location=new Point(27,84),Size=new Size(160,24)});
+            int photoWidth=TextRenderer.MeasureText(Strings.T("Photo — camera bank C1-C7"),Theme.Font(13,true)).Width+34;
+            int videoWidth=TextRenderer.MeasureText(Strings.T("Video — movie mode"),Theme.Font(13,true)).Width+34;
+            _photoMode.SetBounds(190,80,photoWidth,34);_videoMode.SetBounds(196+photoWidth,80,videoWidth,34);
+            Controls.Add(_photoMode);Controls.Add(_videoMode);
+            _photoMode.Click+=delegate{SetVideo(false);};
+            _videoMode.Click+=delegate{SetVideo(true);};
+
+            _fields.SetBounds(26,126,768,428);_fields.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;Controls.Add(_fields);
 
             _name.SetBounds(150,3,220,27);_name.Text=original==null?"":original.Name;_name.MaxLength=80;
             _name.TextChanged+=delegate{UpdateSummary();};
@@ -531,13 +560,8 @@ namespace Xt30Probe.Presentation
             // libellé affiché est traduit.
             Ui.TranslateItems(_category);
             _category.SelectedItem=original==null?"Vintage":original.Category;if(_category.SelectedIndex<0)_category.SelectedIndex=0;
-            // Photo ou vidéo : le jeu de réglages change entièrement d'un mode à l'autre.
-            _kind.SetBounds(540,3,220,27);_kind.DropDownStyle=ComboBoxStyle.DropDownList;
-            _kind.Items.AddRange(new object[]{Strings.T("Photo — camera bank C1-C7"),Strings.T("Video — movie mode")});
-            _kind.SelectedIndex=original!=null&&original.IsVideo?1:0;
-            _kind.SelectedIndexChanged+=delegate{if(_video==IsVideoSelected())return;Carry();_video=IsVideoSelected();BuildFields();UpdateSummary();};
             if(original!=null)foreach(KeyValuePair<string,string> pair in original.Values)_carry[pair.Key]=pair.Value;
-            _video=IsVideoSelected();
+            ApplyModeStyle();
             BuildFields();
 
             _summary.SetBounds(26,566,520,22);_summary.Font=Theme.Font(12,false);_summary.Anchor=AnchorStyles.Bottom|AnchorStyles.Left;Controls.Add(_summary);
@@ -553,7 +577,18 @@ namespace Xt30Probe.Presentation
         void AddLabel(string text,int x,int y)
         {_fields.Controls.Add(new Label(){Text=Strings.T(text),Font=Theme.Font(13,false),ForeColor=Theme.Muted,Location=new Point(x,y),Size=new Size(146,27),TextAlign=ContentAlignment.MiddleLeft});}
 
-        bool IsVideoSelected(){return _kind.SelectedIndex==1;}
+        void SetVideo(bool video)
+        {
+            if(_video==video)return;
+            Carry();_video=video;ApplyModeStyle();BuildFields();UpdateSummary();
+        }
+        void ApplyModeStyle()
+        {
+            _photoMode.Primary=!_video;_videoMode.Primary=_video;
+            _photoMode.ForeColor=_video?Theme.Muted:Color.White;
+            _videoMode.ForeColor=_video?Color.White:Theme.Muted;
+            _photoMode.Invalidate();_videoMode.Invalidate();
+        }
 
         // Mémorise la saisie en cours avant de changer de jeu de réglages.
         void Carry(){foreach(KeyValuePair<string,Control> pair in _values){string v=ValueOf(pair.Value).Trim();if(v!="")_carry[pair.Key]=v;}}
@@ -563,7 +598,6 @@ namespace Xt30Probe.Presentation
             _fields.Controls.Clear();_values.Clear();
             AddLabel("Name",0,0);_fields.Controls.Add(_name);
             AddLabel("Category",0,37);_fields.Controls.Add(_category);
-            AddLabel("This recipe is for",390,0);_fields.Controls.Add(_kind);
             string[] keys=_video?Recipe.VideoParameterOrder:Recipe.ParameterOrder;
             // Deux colonnes : tout tient sans faire défiler.
             int perColumn=(keys.Length+1)/2;
