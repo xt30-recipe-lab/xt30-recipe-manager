@@ -57,7 +57,8 @@ namespace Xt30Probe.AppModel
         public static readonly string[] VideoParameterOrder = {
             "Movie Mode", "F-Log", "ISO", "Film Simulation", "Monochromatic Color",
             "White Balance", "WB Shift R", "WB Shift B", "Dynamic Range",
-            "Color Chrome Effect", "Highlight", "Shadow", "Color", "Sharpness", "Noise Reduction"
+            "Color Chrome Effect", "Highlight", "Shadow", "Color", "Sharpness",
+            "Noise Reduction", "Interframe NR"
         };
         public string[] Parameters { get { return IsVideo ? VideoParameterOrder : ParameterOrder; } }
         public static readonly string[] AdditionalParameters = { "Color Chrome FX Blue", "Clarity", "Grain Size" };

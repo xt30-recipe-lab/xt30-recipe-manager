@@ -15,6 +15,9 @@ namespace Xt30Probe.Presentation
         public readonly ActionButton NewRecipe=new ActionButton("New Recipe",true){IconName="Plus"};
         public readonly ComboBox SimulationFilter=new ComboBox(){DropDownStyle=ComboBoxStyle.DropDownList};
         public readonly ActionButton ShowMore=new ActionButton("Show more recipes",false){Visible=false};
+        // En vidéo, il n'y a pas de catalogue à parcourir : la fiche de réglages
+        // remplace la grille et s'édite directement.
+        public readonly VideoStudioPanel Studio;
         readonly RecipeLibrary _library;
         readonly List<ActionButton> _filters=new List<ActionButton>();
         string _filter="All";
@@ -23,7 +26,8 @@ namespace Xt30Probe.Presentation
         public RecipesPage(RecipeLibrary library)
         {
             _library=library;BackColor=Theme.Background;AutoScroll=true;
-            Controls.Add(Search);Controls.Add(NewRecipe);Controls.Add(Grid);Controls.Add(SimulationFilter);Grid.BackColor=Theme.Background;
+            Studio=new VideoStudioPanel(library){Visible=false,BackColor=Theme.Background};
+            Controls.Add(Search);Controls.Add(NewRecipe);Controls.Add(Grid);Controls.Add(SimulationFilter);Controls.Add(Studio);Grid.BackColor=Theme.Background;
             SimulationFilter.Font=Theme.Font(13,false);SimulationFilter.AccessibleName="Film simulation filter";
             ReloadSimulations();
             SimulationFilter.SelectedIndexChanged+=delegate{RefreshRecipes();};
@@ -49,12 +53,14 @@ namespace Xt30Probe.Presentation
         {
             _filter=filter;
             foreach(ActionButton b in _filters){b.Quiet=b.Text!=filter;b.ForeColor=b.Text==filter?Theme.Green:Theme.Muted;b.Invalidate();}
-            NewRecipe.Text=VideoMode?"New video recipe":"New Recipe";
-            Grid.EmptyTitle=VideoMode?"No video recipe yet":"No recipes found";
-            Grid.EmptyHint=VideoMode
-                ?"Press \"New video recipe\" to write one. Movie settings are set by hand in the camera's own menus: the X-T30 does not store them in the C1-C7 banks."
-                :"Try a different search or filter, or create a new recipe.";
+            // En vidéo, la page bascule sur la fiche de réglages : ni recherche, ni
+            // grille, ni bouton de création — les réglages sont là, directement.
+            bool video=VideoMode;
+            Studio.Visible=video;
+            Search.Visible=!video;SimulationFilter.Visible=!video;NewRecipe.Visible=!video;Grid.Visible=!video;
+            if(video)Studio.Reload();
             RefreshRecipes();
+            PerformLayout();
         }
         // Le premier élément est traduit à l'écran mais reste « toutes » côté requête.
         public void RefreshRecipes(){string sim=SimulationFilter.SelectedIndex<=0?"All simulations":Convert.ToString(SimulationFilter.SelectedItem);Grid.SetRecipes(_library.Query(Search.Input.Text,_filter,sim));PerformLayout();Invalidate();}
@@ -72,6 +78,13 @@ namespace Xt30Probe.Presentation
                 int w=Math.Max(80,TextRenderer.MeasureText(Strings.T(b.Text),Theme.Font(13,false)).Width+26);
                 if(x+w>width+28){x=28;filterY+=42;}
                 b.SetBounds(x+scroll.X,filterY+scroll.Y,w,36);x+=w+5;
+            }
+            if(Studio!=null&&Studio.Visible)
+            {
+                Studio.SetBounds(28+scroll.X,filterY+72+scroll.Y,Math.Max(320,width),Math.Max(420,ClientSize.Height-filterY-92));
+                ShowMore.Visible=false;
+                AutoScrollMinSize=new Size(0,0);
+                return;
             }
             Grid.SetBounds(28+scroll.X,filterY+84+scroll.Y,Math.Max(280,width),Math.Max(250,Grid.Height));
             int below=filterY+84+Grid.Height+14;
@@ -98,7 +111,13 @@ namespace Xt30Probe.Presentation
             if(sites.Count>0)caption+="   ·   "+Strings.T("{0} imported and read-only from {1}",_library.ImportedCount,string.Join(", ",sites.ToArray()));
             return caption;
         }
-        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);Theme.TextAt(e.Graphics,Caption(),12,false,Theme.Muted,new Rectangle(28,Grid.Top-33,Width-56,25));}
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            // La légende compte les vignettes : elle n'a pas de sens en mode vidéo.
+            if(Studio!=null&&Studio.Visible)return;
+            Theme.TextAt(e.Graphics,Caption(),12,false,Theme.Muted,new Rectangle(28,Grid.Top-33,Width-56,25));
+        }
     }
     public sealed class RecipeDetailForm : Form
     {
@@ -504,28 +523,9 @@ namespace Xt30Probe.Presentation
 
         // Chaque paramètre propose les valeurs réelles du X-T30 : impossible de saisir
         // une valeur que le boîtier ne comprendrait pas, ni de faire une faute de frappe.
-        static readonly string[] MovieModes={"4K 30P","4K 25P","4K 24P","FHD 60P","FHD 50P","FHD 30P","FHD 25P","FHD 24P","FHD 120P (high speed)"};
-        static readonly string[] LogModes={"Off","F-Log"};
-        static readonly string[] MovieDynamicRanges={"DR100","DR200","DR400"};
-        static string[] Choices(string key,bool video)
-        {
-            switch(key)
-            {
-                case "Movie Mode": return MovieModes;
-                case "F-Log": return LogModes;
-                case "Film Simulation": return CameraBankFile.FilmSimulations;
-                // Le mode film n'offre pas la priorité plage dynamique : pas de DR-P ici.
-                case "Dynamic Range": return video?MovieDynamicRanges:CameraBankFile.DynamicRanges;
-                case "Dynamic Range Priority": return CameraBankFile.DrPriorities;
-                case "White Balance": return CameraBankFile.WhiteBalances();
-                case "Grain Effect": return CameraBankFile.GrainEffects;
-                case "Color Chrome Effect": return CameraBankFile.ChromeEffects;
-                case "WB Shift R": case "WB Shift B": return CameraBankFile.Scale(-9,9);
-                case "Highlight": case "Shadow": case "Color": case "Sharpness":
-                case "Noise Reduction": case "Monochromatic Color": return CameraBankFile.Scale(-4,4);
-                default: return null;   // ISO : texte libre
-            }
-        }
+        // Les listes de valeurs vivent dans RecipeFields : l'éditeur et la page
+        // vidéo doivent proposer exactement les mêmes.
+        static string[] Choices(string key,bool video){return RecipeFields.Choices(key,video);}
 
         public RecipeEditorForm(Recipe original):this(original,original!=null&&original.IsVideo){}
         public RecipeEditorForm(Recipe original,bool video)
@@ -636,20 +636,7 @@ namespace Xt30Probe.Presentation
 
         static string ValueOf(Control c){ComboBox combo=c as ComboBox;return combo!=null?Convert.ToString(combo.SelectedItem):((TextBox)c).Text;}
 
-        static string Default(string key)
-        {
-            switch(key)
-            {
-                case "Film Simulation": return "Classic Chrome";
-                case "Dynamic Range": return "DR100";
-                case "Movie Mode": return "FHD 30P";
-                case "F-Log": return "Off";
-                case "ISO": return "Auto";
-                case "White Balance": return "Auto";
-                case "Dynamic Range Priority": case "Grain Effect": case "Color Chrome Effect": return "Off";
-                default: return "0";
-            }
-        }
+        static string Default(string key){return RecipeFields.Default(key);}
 
         // Retour immédiat : combien de réglages partiront réellement dans la banque,
         // et à quoi ressemblera son nom une fois le décalage WB ajouté.

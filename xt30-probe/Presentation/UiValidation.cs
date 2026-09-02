@@ -137,6 +137,18 @@ namespace Xt30Probe.Presentation
                         {videoEditor.DrawToBitmap(b,new Rectangle(0,0,b.Width,b.Height));b.Save(Path.Combine(root,"recipe-editor-video.png"));}
                         videoEditor.Close();
                     }
+                    // Mode vidéo : la page montre la fiche de réglages elle-même,
+                    // pas une grille vide de recettes à choisir.
+                    form.ClientSize=new Size(1536,1024);
+                    form.SwitchPage("Recipes");form.Recipes.SetFilter("Video");Application.DoEvents();
+                    Require(form.Recipes.Studio.Visible,"Video mode must show the movie settings sheet");
+                    Require(!form.Recipes.Grid.Visible,"Video mode must hide the recipe grid");
+                    Require(!form.Recipes.Search.Visible,"Video mode must hide the recipe search");
+                    form.SaveScreenshot(Path.Combine(root,"offline-video-mode.png"));
+                    form.Recipes.SetFilter("All");Application.DoEvents();
+                    Require(form.Recipes.Grid.Visible&&!form.Recipes.Studio.Visible,"Leaving video mode restores the grid");
+                    passed.Add("Video mode opens straight onto the movie settings, editable in place");
+
                     // Didacticiel : rendu dans les deux langues principales, chaque
                     // étape doit s'afficher sans exception de mise en page.
                     foreach(string code in new string[]{"en","fr"})

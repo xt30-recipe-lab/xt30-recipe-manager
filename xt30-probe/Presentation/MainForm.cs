@@ -41,6 +41,7 @@ namespace Xt30Probe.Presentation
         public readonly CameraPresenter Camera;
         public readonly RecipeLibrary Library;
         public readonly DiagnosticPanel Diagnostics;
+        public RecipesPage Recipes{get{return _recipes;}}
         public string CurrentPage="Camera";
         // Le mode capture ne doit pas ouvrir de fenêtre modale : elle bloquerait
         // la minuterie qui prend la copie d'écran.
