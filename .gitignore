@@ -16,6 +16,13 @@
 
 # Third-party recipe corpus and photography are not distributed
 /xt30-probe/library/
+/xt30-probe/generated/
+
+# Screen captures taken while driving the Tether App show the local desktop
+/xt30-probe/Tools/RestoreMacro/captures/
+
+# Article URL lists rebuilt by the importers on demand
+/xt30-probe/Tools/FujiXWeeklyImporter/tag-urls.txt
 
 # Experimental write utility is intentionally outside the read-only release
 /xt30-probe/Tools/BackupWrite/
@@ -40,6 +47,7 @@
 /xt30-probe/photo du fuji x-t30 sur fond blanc a détourer.jpg
 
 # Editor and operating-system files
+/.claude/
 .vs/
 .vscode/
 .idea/

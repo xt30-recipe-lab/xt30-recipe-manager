@@ -377,6 +377,88 @@ Fiche d'une recette → **Compare with camera** → choix de la banque → table
 **« Create a camera settings file… »**. Le message final rappelle la marche à suivre dans la
 Tether App et insiste sur la conservation du fichier d'origine, qui restaure l'état exact.
 
+## 9ter. CHAÎNE COMPLÈTE VALIDÉE SUR MATÉRIEL (02/09/2026, ~16h50)
+
+**Le X-T30 affiche « CLAUDE TEST » en C1.** L'aller-retour complet fonctionne :
+
+```
+lecture PTP (GetObject handle 0)  →  décodage layout X-T30  →  modification + somme
+      →  fichier .dat  →  Tether App « Restauration »  →  boîtier mis à jour
+```
+
+### Validation croisée contre le logiciel Fujifilm
+
+La fonction « Sauvegarde des paramètres de l'appareil » de la Tether App a été déclenchée,
+produisant `FUJIFILM_X-T30_2026 9 2_1644.dat`. Comparaison avec notre lecture `GetObject` :
+
+| Contrôle | Résultat |
+|---|---|
+| Taille | **5 628 octets des deux côtés** |
+| Différence | **2 octets seulement** : offset 248 (compteur, listé volatil par grawji) et 176/177 (la somme qui en découle) |
+| Notre formule de somme appliquée au fichier **de Fujifilm** | stockée `0x71E9` = calculée `0x71E9` — **correspond** |
+
+Autrement dit : notre lecture est fidèle au bit près, et notre rétro-ingénierie de la somme de
+contrôle est confirmée contre l'implémentation du constructeur.
+
+### Le test appliqué
+
+Fichier généré **à partir de la sauvegarde Fujifilm** (base la plus sûre) : nom de C1 remplacé
+par « CLAUDE TEST », **13 octets modifiés, tous dans le champ du nom et la somme, zéro
+ailleurs**, somme revalidée. Restauré via la Tether App. **Le boîtier affiche le nouveau nom.**
+
+### Répartition des rôles retenue
+
+- **Notre application** : lit, décode, compare, et produit un `.dat` valide. Elle n'envoie
+  jamais un octet à l'appareil ; `Probe.cs` reste en lecture seule.
+- **La Tether App Fujifilm** : effectue l'écriture, via une fonction officiellement supportée
+  pour ce modèle. Trois clics : Appareil photo → Restauration des paramètres → choisir le fichier.
+- **Retour arrière** : restaurer la sauvegarde Fujifilm d'origine remet l'appareil à l'identique.
+
+## 9quater. Macro d'automatisation de la restauration
+
+`xt30-probe/Tools/RestoreMacro/Restore-CameraSettings.ps1` automatise les trois gestes de la
+Tether App. **Elle n'envoie aucune commande USB** : elle pilote le logiciel de Fujifilm, qui
+reste seul à écrire dans le boîtier.
+
+### Pourquoi le clavier plutôt que des clics au pixel
+
+Trois pistes ont été évaluées sur l'application réelle :
+
+| Piste | Verdict |
+|---|---|
+| Messages Win32 sur le menu (`GetMenu` + `WM_COMMAND`) | **Impossible** — `GetMenu` renvoie 0 : c'est un `MenuStrip` WinForms dessiné, pas un menu Win32 |
+| UI Automation | **Impossible** — les 30 éléments exposés sont des `Pane` anonymes ; aucune entrée de menu accessible |
+| Clavier `Alt` → `→` → `↓` → `Fin` | **Retenu** — vérifié par capture : surligne exactement « Restauration des paramètres de l'appareil », indépendamment de la position de la fenêtre et de la résolution |
+
+`Fin` sélectionne la **dernière** entrée du menu, ce qui évite de compter les entrées grisées
+(les items désactivés sont sautés par la navigation clavier).
+
+### Garde-fous
+
+- **Validation du fichier avant tout** : taille 5 628, signature `FUJIFILM`, modèle `X-T30`,
+  et **somme de contrôle recalculée** — un fichier incohérent est refusé sans rien tenter.
+- Vérification que l'appareil est présent (VID 04CB).
+- **Contrôle du focus avant chaque frappe** : si une autre application prend le focus, le script
+  **abandonne** au lieu d'envoyer des touches — notamment « Entrée » — à une fenêtre inconnue.
+  Ce défaut s'est produit au premier essai (une fenêtre de navigateur a volé le focus) et c'est
+  ce garde-fou qui l'a corrigé.
+- Mode `-Preview` : navigue jusqu'à l'entrée de menu, enregistre une capture et **s'arrête sans
+  rien activer**. À utiliser après chaque mise à jour de la Tether App pour vérifier que la
+  dernière entrée du menu est toujours la restauration.
+- Le champ « nom de fichier » est renseigné par `WM_SETTEXT`, pas par frappe de caractères.
+
+### Pistes écartées
+
+- **Embarquer la fenêtre de la Tether App dans la nôtre** (`SetParent`) : ne supprime aucun
+  clic, casse à chaque mise à jour, et modifier la présentation d'un logiciel tiers est
+  juridiquement douteux. Sans intérêt.
+- **Reprendre le code de la Tether App** : logiciel propriétaire — contrefaçon. Exclu.
+- **Écrire nous-mêmes (`SendObjectInfo`/`SendObject`)** : reste la solution idéale à terme, mais
+  le boîtier n'annonce pas ces opcodes. Il faudrait capturer le trafic USB pendant une
+  restauration réelle (méthode employée par grawji avec X RAW Studio) pour connaître les
+  opcodes exacts. C'est de l'interopérabilité par observation, légitime — mais non nécessaire
+  tant que la macro suffit.
+
 ## 10. État
 
 - [x] Décodeur de blob construit et auto-testé, aucun accès appareil.

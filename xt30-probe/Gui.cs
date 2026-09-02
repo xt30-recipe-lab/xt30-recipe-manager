@@ -37,10 +37,34 @@ namespace Xt30Probe
             {
                 Assets.Initialize();
                 if(smoke)return UiValidation.Run();
-                using(MainForm form=new MainForm(false,null))
+                // Écran d'ouverture pendant le chargement de la bibliothèque : avec
+                // plusieurs centaines de recettes et leurs vignettes, la fenêtre
+                // principale ne peut pas apparaître instantanément.
+                SplashForm splash=null;
+                if(!capture)
                 {
-                    if(capture)UiValidation.ConfigureLiveCapture(form,args);
-                    Application.Run(form);
+                    // La langue avant l'écran d'ouverture : ses messages sont les
+                    // premiers que l'utilisateur voit.
+                    Strings.Load(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"data"));
+                    splash=new SplashForm();splash.Show();splash.Report(Strings.T("Starting…"));
+                    SplashForm shown=splash;
+                    Xt30Probe.AppModel.RecipeLibrary.Progress=delegate(string key,object[] values)
+                    {shown.Report(values==null||values.Length==0?Strings.T(key):Strings.T(key,values));};
+                }
+                try
+                {
+                    using(MainForm form=new MainForm(false,null))
+                    {
+                        Xt30Probe.AppModel.RecipeLibrary.Progress=null;
+                        if(splash!=null){splash.CloseAfterMinimumTime(1100);splash.Dispose();splash=null;}
+                        if(capture)UiValidation.ConfigureLiveCapture(form,args);
+                        Application.Run(form);
+                    }
+                }
+                finally
+                {
+                    Xt30Probe.AppModel.RecipeLibrary.Progress=null;
+                    if(splash!=null){splash.Dispose();}
                 }
                 return 0;
             }

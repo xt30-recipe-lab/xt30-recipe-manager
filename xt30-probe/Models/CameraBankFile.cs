@@ -53,6 +53,57 @@ namespace Xt30Probe.AppModel
             catch (Exception) { return null; }
         }
 
+        // ---------------- Valeurs proposées à l'utilisateur ----------------
+        // Ces listes sont la référence de l'éditeur de recettes. Elles ne
+        // contiennent QUE des valeurs que les encodeurs ci-dessous savent traduire :
+        // une recette créée dans l'application est donc toujours transférable.
+
+        public static readonly string[] FilmSimulations = {
+            "Provia/Standard", "Astia/Soft", "Velvia/Vivid", "Classic Chrome",
+            "PRO Neg. Std", "PRO Neg. Hi", "Eterna",
+            "ACROS", "ACROS+R", "ACROS+Ye", "ACROS+G",
+            "Monochrome", "Monochrome+R", "Monochrome+Ye", "Monochrome+G", "Sepia" };
+
+        public static readonly string[] DynamicRanges = { "DR100", "DR200", "DR400" };
+        public static readonly string[] DrPriorities = { "Off", "Auto" };
+        public static readonly string[] GrainEffects = { "Off", "Weak", "Strong" };
+        public static readonly string[] ChromeEffects = { "Off", "Weak", "Strong" };
+
+        public static readonly int[] KelvinPresets = {
+            2500,2550,2650,2700,2800,2850,2950,3000,3100,3200,3300,3400,3600,3700,3800,4000,
+            4200,4300,4500,4800,5000,5300,5600,5900,6300,6700,7100,7700,8300,9100,10000 };
+
+        // Modes nommés puis les températures exactes que le boîtier accepte.
+        public static string[] WhiteBalances()
+        {
+            List<string> list = new List<string> {
+                "Auto", "Daylight", "Shade", "Fluorescent 1", "Fluorescent 2", "Fluorescent 3",
+                "Incandescent", "Underwater" };
+            foreach (int k in KelvinPresets) list.Add(k + "K");
+            return list.ToArray();
+        }
+
+        // Échelle signée « -4 … +4 » telle qu'affichée par l'appareil.
+        public static string[] Scale(int min, int max)
+        {
+            List<string> list = new List<string>();
+            for (int v = max; v >= min; v--) list.Add(v > 0 ? "+" + v : v.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return list.ToArray();
+        }
+
+        // Le champ est-il transférable dans le fichier de réglages du boîtier ?
+        public static bool IsTransferable(string key)
+        {
+            switch (key)
+            {
+                case "Film Simulation": case "Dynamic Range": case "Dynamic Range Priority":
+                case "White Balance": case "Highlight": case "Shadow": case "Color":
+                case "Sharpness": case "Noise Reduction": case "Grain Effect":
+                case "Color Chrome Effect": return true;
+                default: return false;   // ISO, WB Shift, Monochromatic Color… : non stockés
+            }
+        }
+
         // ---------------- Encodeurs : inverses exacts des décodeurs ----------------
         // Chacun renvoie -1 quand la valeur n'a pas de code vérifié : on n'écrit
         // JAMAIS un octet deviné, on signale le champ comme non transférable.
@@ -165,6 +216,39 @@ namespace Xt30Probe.AppModel
             return -1;
         }
 
+        // Le X-T30 ne mémorise PAS le décalage de balance des blancs par banque : ce
+        // réglage n'existe nulle part dans le fichier. La convention retenue (celle
+        // que l'utilisateur applique déjà à la main) est de l'inscrire dans le NOM de
+        // la banque, par exemple « PACIFIC R+1 B-3 », pour pouvoir le ressaisir.
+        // Le nom est plafonné à NameMax : c'est le nom de base qui est raccourci,
+        // jamais le décalage, car c'est lui qui serait autrement perdu.
+        public static string BuildBankName(Recipe recipe, string baseName)
+        {
+            string suffix = "";
+            int r, b;
+            if (TryShift(recipe.Get("WB Shift R"), out r) && r != 0) suffix += " R" + Signed(r);
+            if (TryShift(recipe.Get("WB Shift B"), out b) && b != 0) suffix += " B" + Signed(b);
+            string name = (baseName ?? "").Trim();
+            // Le nom porte déjà le décalage : c'est le cas des recettes créées ici,
+            // dont le nom a été formé de cette façon. Le rajouter donnerait
+            // « PACIFIC R+1 B-3 R+1 B-3 ».
+            if (suffix.Length > 0 && name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                return name.Length > NameMax ? name.Substring(0, NameMax).TrimEnd() : name;
+            int room = NameMax - suffix.Length;
+            if (room < 1) return name.Length > NameMax ? name.Substring(0, NameMax) : name;
+            if (name.Length > room) name = name.Substring(0, room).TrimEnd();
+            return name + suffix;
+        }
+
+        static bool TryShift(string value, out int result)
+        {
+            result = 0;
+            if (value == null || value == "Not specified") return false;
+            return int.TryParse(value.Trim().Replace("+", "").Replace(" ", ""), out result);
+        }
+
+        static string Signed(int v) { return (v > 0 ? "+" : "") + v.ToString(System.Globalization.CultureInfo.InvariantCulture); }
+
         static string Clean(string v)
         {
             string s = (v ?? "").Trim().ToUpperInvariant().Replace(" ", "").Replace("_", "");
@@ -228,55 +312,37 @@ namespace Xt30Probe.AppModel
         // reste du fichier est laissé strictement intact.
         public static PatchResult Prepare(byte[] source, int slot, Recipe recipe, string newName, string outputPath)
         {
+            Dictionary<int, Recipe> one = new Dictionary<int, Recipe>();
+            one[slot] = recipe;
+            Dictionary<int, string> names = new Dictionary<int, string>();
+            if (!string.IsNullOrEmpty(newName)) names[slot] = newName;
+            return PrepareMany(source, one, names, outputPath);
+        }
+
+        // Écrit plusieurs banques dans un seul fichier : un pack complet ne demande
+        // alors qu'UNE restauration au lieu de sept.
+        public static PatchResult PrepareMany(byte[] source, Dictionary<int, Recipe> assignments,
+                                              Dictionary<int, string> names, string outputPath)
+        {
             PatchResult result = new PatchResult();
             string reason;
             if (!IsValidSettingsFile(source, out reason)) { result.Error = reason; return result; }
-            if (slot < 0 || slot >= Slots) { result.Error = "Bank index out of range."; return result; }
+            if (assignments == null || assignments.Count == 0) { result.Error = "No bank to write."; return result; }
+            foreach (int s in assignments.Keys)
+                if (s < 0 || s >= Slots) { result.Error = "Bank index out of range."; return result; }
 
             byte[] blob = (byte[])source.Clone();
-            int b = SlotBase(slot);
-
-            Put(blob, b + 0, FilmSim(recipe.Get("Film Simulation")), "Film Simulation", result);
-            Put(blob, b + RelHighlight, Tone(recipe.Get("Highlight")), "Highlight", result);
-            Put(blob, b + RelShadow, Tone(recipe.Get("Shadow")), "Shadow", result);
-            Put(blob, b + RelSharpness, Tone(recipe.Get("Sharpness")), "Sharpness", result);
-            Put(blob, b + RelColor, Color(recipe.Get("Color")), "Color", result);
-            Put(blob, b + RelNr, NoiseReduction(recipe.Get("Noise Reduction")), "Noise Reduction", result);
-            Put(blob, b + RelGrain, Grain(recipe.Get("Grain Effect")), "Grain Effect", result);
-            Put(blob, b + RelChrome, Chrome(recipe.Get("Color Chrome Effect")), "Color Chrome Effect", result);
-
-            // La plage dynamique n'est écrite que si la priorité est explicitement Off :
-            // sinon c'est la priorité qui la pilote et l'écrire n'aurait pas de sens.
-            int priority = DrPriority(recipe.Get("Dynamic Range Priority"));
-            if (priority >= 0) Put(blob, b + RelDrPriority, priority, "Dynamic Range Priority", result);
-            else result.Skipped.Add("Dynamic Range Priority (no verified code for \"" + recipe.Get("Dynamic Range Priority") + "\")");
-            if (priority == 3) Put(blob, b + RelDr, DynamicRange(recipe.Get("Dynamic Range")), "Dynamic Range", result);
-            else result.Skipped.Add("Dynamic Range (driven by the priority setting)");
-
-            int wb = WhiteBalance(recipe.Get("White Balance"));
-            Put(blob, b + RelWbMode, wb, "White Balance", result);
-            if (wb == 8) Put(blob, b + RelWbKelvin, Kelvin(recipe.Get("White Balance")), "Color Temperature", result);
-
-            // Nom de la banque : ASCII, tronqué, ancien nom effacé.
-            if (!string.IsNullOrEmpty(newName))
+            foreach (KeyValuePair<int, Recipe> pair in assignments)
             {
-                string ascii = "";
-                foreach (char c in newName) if (c >= 0x20 && c <= 0x7E) ascii += c;
-                if (ascii.Length > NameMax) ascii = ascii.Substring(0, NameMax);
-                for (int i = 0; i < NameMax + 1; i++) blob[b + NameRel + i] = 0;
-                for (int i = 0; i < ascii.Length; i++) blob[b + NameRel + i] = (byte)ascii[i];
-                result.Written.Add("Bank name = \"" + ascii + "\"");
+                string bankName = null;
+                if (names != null && names.ContainsKey(pair.Key)) bankName = names[pair.Key];
+                PatchBank(blob, pair.Key, pair.Value, bankName, result);
             }
 
-            // Réglages que ce fichier ne stocke pas : signalés, jamais inventés.
-            foreach (string key in new string[] { "ISO", "WB Shift R", "WB Shift B", "Monochromatic Color" })
-                if (recipe.Get(key) != "Not specified") result.Skipped.Add(key + " (not stored in the camera settings file — set it by hand)");
-
-            // Somme de contrôle recalculée en dernier, sinon l'appareil refuse le fichier.
+            // Somme de contrôle recalculée une seule fois, après toutes les banques.
             int sum = Checksum(blob);
             blob[ChecksumOffset] = (byte)(sum & 0xFF);
             blob[ChecksumOffset + 1] = (byte)((sum >> 8) & 0xFF);
-
             if (!ChecksumValid(blob)) { result.Error = "Internal error: the recomputed checksum does not verify."; return result; }
 
             try
@@ -289,6 +355,53 @@ namespace Xt30Probe.AppModel
             result.OutputPath = outputPath;
             result.Success = true;
             return result;
+        }
+
+        static void PatchBank(byte[] blob, int slot, Recipe recipe, string newName, PatchResult result)
+        {
+            int b = SlotBase(slot);
+            string tag = "C" + (slot + 1) + " ";
+
+            Put(blob, b + 0, FilmSim(recipe.Get("Film Simulation")), tag + "Film Simulation", result);
+            Put(blob, b + RelHighlight, Tone(recipe.Get("Highlight")), tag + "Highlight", result);
+            Put(blob, b + RelShadow, Tone(recipe.Get("Shadow")), tag + "Shadow", result);
+            Put(blob, b + RelSharpness, Tone(recipe.Get("Sharpness")), tag + "Sharpness", result);
+            Put(blob, b + RelColor, Color(recipe.Get("Color")), tag + "Color", result);
+            Put(blob, b + RelNr, NoiseReduction(recipe.Get("Noise Reduction")), tag + "Noise Reduction", result);
+            Put(blob, b + RelGrain, Grain(recipe.Get("Grain Effect")), tag + "Grain Effect", result);
+            Put(blob, b + RelChrome, Chrome(recipe.Get("Color Chrome Effect")), tag + "Color Chrome Effect", result);
+
+            // La plage dynamique n'est écrite que si la priorité est explicitement Off :
+            // sinon c'est la priorité qui la pilote et l'écrire n'aurait pas de sens.
+            int priority = DrPriority(recipe.Get("Dynamic Range Priority"));
+            if (priority >= 0) Put(blob, b + RelDrPriority, priority, tag + "Dynamic Range Priority", result);
+            else result.Skipped.Add(tag + "Dynamic Range Priority (no verified code for \"" + recipe.Get("Dynamic Range Priority") + "\")");
+            if (priority == 3) Put(blob, b + RelDr, DynamicRange(recipe.Get("Dynamic Range")), tag + "Dynamic Range", result);
+            else result.Skipped.Add(tag + "Dynamic Range (driven by the priority setting)");
+
+            int wb = WhiteBalance(recipe.Get("White Balance"));
+            Put(blob, b + RelWbMode, wb, tag + "White Balance", result);
+            if (wb == 8) Put(blob, b + RelWbKelvin, Kelvin(recipe.Get("White Balance")), tag + "Color Temperature", result);
+
+            // Nom de la banque : ASCII, tronqué, ancien nom effacé.
+            if (!string.IsNullOrEmpty(newName))
+            {
+                string ascii = "";
+                foreach (char c in newName) if (c >= 0x20 && c <= 0x7E) ascii += c;
+                if (ascii.Length > NameMax) ascii = ascii.Substring(0, NameMax);
+                for (int i = 0; i < NameMax + 1; i++) blob[b + NameRel + i] = 0;
+                for (int i = 0; i < ascii.Length; i++) blob[b + NameRel + i] = (byte)ascii[i];
+                result.Written.Add(tag + "name = \"" + ascii + "\"");
+            }
+
+            // Réglages que ce fichier ne stocke pas : signalés, jamais inventés.
+            // Les décalages de balance des blancs sont repris dans le nom de la banque
+            // (voir BuildBankName) ; on le dit plutôt que de laisser croire à une perte.
+            foreach (string key in new string[] { "WB Shift R", "WB Shift B" })
+                if (recipe.Get(key) != "Not specified" && recipe.Get(key).Trim() != "0")
+                    result.Skipped.Add(tag + key + " (the X-T30 cannot store it per bank — carried in the bank name, set it by hand)");
+            foreach (string key in new string[] { "ISO", "Monochromatic Color" })
+                if (recipe.Get(key) != "Not specified") result.Skipped.Add(tag + key + " (not stored in the camera settings file — set it by hand)");
         }
 
         static void Put(byte[] blob, int offset, int value, string label, PatchResult result)

@@ -2,40 +2,60 @@
 
 ![XT30 Recipe Manager](docs/assets/github/xt30-recipe-manager-hero.png)
 
-Application Windows pour organiser des recettes Fujifilm et inspecter en lecture
-seule un **X-T30 première génération** (X-Trans CMOS 4 / X-Processor 4) connecté
-en USB.
+Application Windows pour organiser des recettes Fujifilm et charger les banques
+personnalisées **C1–C7** d'un **X-T30 première génération** (X-Trans CMOS 4 /
+X-Processor 4).
 
-Le projet propose une bibliothèque locale, des favoris, des packs, l'affichage des
-slots C1–C7 et des diagnostics PTP/MTP. Les données affichées comme `CAMERA`
-proviennent d'une lecture réelle du boîtier ; les autres restent explicitement
-marquées `LOCAL` ou `Not reported`.
+L'application lit l'appareil, décode ses sept banques, et prépare un fichier de
+réglages complet. **Elle n'envoie jamais de commande d'écriture au boîtier** :
+c'est la FUJIFILM Tether App, par sa fonction officielle « BACKUP RESTORE », qui
+effectue l'écriture. Les valeurs affichées comme `CAMERA` proviennent d'une
+lecture réelle ; les autres restent marquées `LOCAL` ou `Not reported`.
 
 > Projet indépendant et non affilié à FUJIFILM Corporation. Fujifilm et les noms
 > de produits associés appartiennent à leurs détenteurs respectifs.
 
 ## Règle absolue
 
-Tant que les capacités réelles du X-T30 mk1 ne sont pas connues : **lecture seule**.
-Aucun SetDevicePropValue, aucun opcode vendor, aucune écriture d'aucune sorte.
-Le firmware n'est jamais approché.
+Le moteur PTP est **en lecture seule**, imposé par une liste blanche d'opcodes
+unique et non contournable (`MtpReadOnlyGuard`). Sont autorisés uniquement :
+`GetDeviceInfo`, `OpenSession`, `CloseSession`, `GetStorageIDs`,
+`GetObjectInfo`, `GetObject`, `GetDevicePropDesc`, `GetDevicePropValue`.
 
-## État du projet
+Tout le reste est refusé : `SetDevicePropValue`, `SendObject`, `SendObjectInfo`,
+`DeleteObject`, `SetObjectPropValue`, la capture, le changement de mode USB, et
+**tous** les opcodes vendor. Le firmware n'est jamais approché.
 
-- [x] Phase 1 — Recherche : projets Filmcase, fujifilm-ptp-recipes, rawji, FujiHack,
-      libfuji/libpict, libgphoto2 analysés → `docs/01-synthese-recherche.md`
-- [x] Sonde PTP/MTP Windows construite et testée en lecture seule.
-- [x] Phase 3 — Scan réel réussi ; rapports JSON/TXT produits et archivés.
-- [x] Phase 4 — Comparaison avec les implémentations existantes, dont
-      [grawji X-T3/X-T30](docs/06-grawji-xt3-vs-xt30.md).
-- [ ] Phase 5 — Écriture expérimentale (JAMAIS sans autorisation explicite ;
-      premier test = renommage de C7 avec sauvegarde/restauration)
-- [x] Interface du mockup, bibliothèque locale, packs de démonstration et diagnostics.
-- [x] Import de métadonnées de recettes pris en charge séparément.
-- [ ] Lecture/écriture réelle des banques C1–C7.
+## Ce que fait l'application
 
-Les corpus de recettes et les photographies provenant de sites tiers ne sont pas
-distribués dans ce dépôt. Leur import exige une autorisation ou une licence compatible.
+- **Lire l'appareil** — copie le fichier de réglages (objet PTP handle 0, format
+  0x5000) et décode les sept banques : simulation, plage dynamique, priorité,
+  tons, couleur, netteté, réduction du bruit, grain, Color Chrome, balance des
+  blancs et nom.
+- **Bibliothèque de recettes** — vos recettes plus les catalogues publics
+  importés, filtrables par simulation, catégorie, compatibilité, favoris,
+  photo/vidéo. Galerie complète des photos publiées avec chaque recette.
+- **Créer vos recettes** — seules les valeurs que le X-T30 accepte réellement
+  sont proposées : une recette créée ici est toujours transférable. Mode
+  **photo** (banques C1–C7) ou **vidéo** (menus film du boîtier).
+- **Charger C1–C7** — un panneau permanent à côté de l'état réel des banques :
+  une recette par banque, le nom final et son compteur sur 25 caractères
+  recalculés en direct, et un seul fichier pour les sept banques.
+- **Cinq langues** — anglais, français, espagnol, allemand, italien, appliquées
+  à chaud sans redémarrage.
+- **Didacticiel** en six étapes au premier lancement.
+
+## Ce que l'appareil ne peut pas stocker
+
+Le fichier de réglages n'a pas de place pour l'ISO, ni pour le décalage de
+balance des blancs, ni pour quelques valeurs sans code vérifié. L'application ne
+les invente jamais : elle les liste après chaque envoi pour que vous les régliez
+au menu. Le décalage de balance des blancs est écrit dans le **nom de la
+banque**, d'où des noms comme `PACIFIC R+1 B-3`.
+
+Les réglages d'image du **mode film** ne sont ni dans les banques C1–C7 ni dans
+le fichier de réglages : une recette vidéo est une fiche à reporter à la main,
+et l'application le dit au lieu de laisser croire à un transfert.
 
 ## Compilation
 
@@ -49,38 +69,62 @@ build.cmd
 La compilation produit `xt30-recipe-manager.exe` et `xt30-probe-cli.exe`. Les
 fichiers du dossier `xt30-probe/Assets` doivent rester à côté de l'exécutable.
 
+Validation hors ligne, sans aucun accès à l'appareil :
+
+```bat
+xt30-recipe-manager.exe --ui-smoke
+```
+
 ## Utilisation
 
-1. Lancez `xt30-recipe-manager.exe`.
-2. Pour un scan, placez le boîtier en mode `USB RAW CONV./BACKUP RESTORE`.
-3. Connectez le X-T30 puis utilisez **Scan Camera**.
+1. Sur le boîtier : `MENU → CONFIG. → RÉGLAGE CONNEXION → MODE CONNEXION USB →
+   CONV. RAW USB / SAUVEG. RESTAUR.`, puis éteignez et rallumez.
+2. Branchez le X-T30 et lancez `xt30-recipe-manager.exe`.
+3. **Banques C1–C7 → Lire mon appareil**.
+4. Choisissez une recette par banque dans le panneau de droite, puis
+   **Envoyer les sept à l'appareil**.
 
-Le scan ne modifie aucun réglage et n'écrit rien dans l'appareil.
+Conservez votre fichier de réglages d'origine : il remet l'appareil exactement
+dans son état initial.
 
 ## Arborescence
 
-- `xt30-probe/` — l'application : `Probe.cs` (moteur), `Gui.cs` (entrée GUI),
-  `Presentation/` (composants et pages), `Models/` (bibliothèque locale), `Camera/` (adaptateur UI),
-  `build.cmd`, `xt30-recipe-manager.exe` (fenêtre, double-clic), `xt30-probe-cli.exe` (console)
-- `docs/01-synthese-recherche.md` — synthèse de la recherche
-- `docs/02-proprietes-ptp.md` — table des propriétés PTP Fuji (état des connaissances)
-- `docs/03-approche-windows.md` — choix technique (WPD passthrough, garde-fou read-only)
-- `INSTRUCTIONS-TEST.md` — procédure de test à suivre avec l'appareil
-- `xt30-probe/Tools/FujiXWeeklyImporter/` — importeur Fuji X Weekly (module séparé du moteur)
-- `docs/` — recherche, protocole, validation et visuels promotionnels
+- `xt30-probe/Probe.cs` — moteur PTP/MTP en lecture seule (liste blanche)
+- `xt30-probe/Gui.cs` — point d'entrée graphique
+- `xt30-probe/Presentation/` — pages, composants, traductions, didacticiel
+- `xt30-probe/Models/` — bibliothèque locale, format du fichier de réglages
+- `xt30-probe/Camera/` — lecture des banques, restauration via la Tether App
+- `xt30-probe/Tools/BackupRead/` — lecture du fichier de réglages (handle 0)
+- `xt30-probe/Tools/BackupDecoder/` — décodeur hors ligne + auto-tests
+- `xt30-probe/Tools/RestoreMacro/` — pilotage de la FUJIFILM Tether App
+- `xt30-probe/Tools/*Importer/`, `Tools/GalleryFetcher/` — imports de catalogues
+- `docs/` — recherche, protocole, format du fichier, journal des décisions
 
-## Faits clés issus de la recherche
+## Catalogues de recettes
 
-- Le mécanisme C1–C7 par PTP (0xD18C sélecteur / 0xD18D nom / bloc 0xD190..0xD1A5) est
-  confirmé sur X-S10, X-H2, X-T5 — mais **jamais testé sur X-T30 mk1**, et le X-Pro3
-  (même génération) échoue. D'où le probe.
-- Mode USB requis sur l'appareil : **USB RAW CONV./BACKUP RESTORE**.
-- Le X-T30 mk1 est confirmé fonctionnel en PTP USB, PID `0x02E3`.
-- Limitations attendues du X-T30 : pas de Classic Negative, Bleach Bypass, Color Chrome FX Blue,
-  Clarity, Grain Size ; l'application devra les gérer explicitement (jamais d'envoi silencieux).
+Les corpus de recettes et les photographies provenant de sites tiers **ne sont
+pas distribués** dans ce dépôt (`library/` est exclu). Les importeurs les
+reconstruisent depuis les sites publics, en conservant pour chaque recette son
+site d'origine, son auteur et l'URL de l'article.
+
+Sources prises en charge : Fuji X Weekly, film.recipes, Filmsim Recipes.
+
+## Faits établis par ce projet
+
+- Le mécanisme C1–C7 par PTP (0xD18C / 0xD18D / 0xD190–0xD1A5) documenté sur
+  X-S10, X-H2 et X-T5 est **absent du X-T30 première génération** : vérifié dans
+  le bon mode USB, par `GetDevicePropDesc` **et** `GetDevicePropValue`.
+- Le fichier de sauvegarde du X-T30 mk1 fait **5628 octets** ; sa structure et sa
+  somme de contrôle ont été établies ici et validées contre une sauvegarde
+  produite par Fujifilm elle-même (`docs/10-piste-backup-c1c7.md`).
+- Mode USB requis : **USB RAW CONV./BACKUP RESTORE**. PID `0x02E3`.
+- Limitations du X-T30 gérées explicitement : pas de Classic Negative, Nostalgic
+  Neg., Reala Ace, Eterna Bleach Bypass, Color Chrome FX Blue, Clarity, ni choix
+  de taille de grain.
 
 ## Licence
 
-Aucune licence open source n'a encore été choisie. En l'absence de fichier
-`LICENSE`, tous les droits sur le code original sont réservés. Les composants ou
-références tiers conservent leurs propres licences.
+XT30 Recipe Manager est gratuit et open source sous licence [MIT](LICENSE).
+Vous pouvez utiliser, étudier, modifier et redistribuer le code dans les
+conditions de cette licence. Les composants ou références tiers conservent
+leurs propres licences.

@@ -9,7 +9,9 @@ namespace Xt30Probe.Presentation
     public static class CameraWritePolicy
     {
         public static bool Available { get { return false; } }
-        public const string Explanation = "Camera writing not available yet";
+        // Reste faux : l'application n'émet aucune commande d'écriture PTP. Envoyer
+        // un fichier de réglages passe par la Tether App de Fujifilm, jamais par ici.
+        public const string Explanation = "This application never writes to the camera. Fujifilm's own Tether App performs the restore.";
     }
     public sealed class NavigationItem : Control
     {
@@ -27,8 +29,10 @@ namespace Xt30Probe.Presentation
             Graphics g=e.Graphics;g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             if(Selected||_hover)Theme.Round(g,ClientRectangle,Color.FromArgb(239,240,240),Color.FromArgb(239,240,240),8);
             if(Selected)using(Pen p=new Pen(Theme.Green,3))g.DrawLine(p,1,5,1,Height-5);
+            // Text est la clé de page (jamais traduite) ; l'icône et la navigation
+            // s'appuient dessus, seul l'affichage est traduit.
             Color c=Selected?Theme.Green:Theme.Text;Theme.Icon(g,Text,new Rectangle(21,17,23,23),Selected?Theme.Green:Theme.Muted);
-            Theme.TextAt(g,Text,15,Selected,c,new Rectangle(65,0,Width-70,Height));
+            Theme.TextAt(g,Strings.T(Text),15,Selected,c,new Rectangle(65,0,Width-70,Height));
             if(Focused&&ShowFocusCues)ControlPaint.DrawFocusRectangle(g,new Rectangle(5,5,Width-11,Height-11));
         }
     }
@@ -59,8 +63,8 @@ namespace Xt30Probe.Presentation
         {
             base.OnPaint(e);Graphics g=e.Graphics;Assets.Camera(g,new Rectangle(12,28,66,56));
             Theme.TextAt(g,State==null?"FUJIFILM X-T30":State.Name,13,true,Theme.Text,new Rectangle(88,19,Width-96,23));
-            Theme.Dot(g,90,51,StateColor(State));Theme.TextAt(g,State==null?"Disconnected":State.ConnectionText,13,false,Theme.Text,new Rectangle(106,43,Width-111,24));
-            Theme.Lines(g,State!=null&&State.UsbMode!="Not reported"?State.UsbMode.Replace("/","/\n"):"USB mode\nnot reported",12,Theme.Muted,new Rectangle(89,80,Width-97,45));
+            Theme.Dot(g,90,51,StateColor(State));Theme.TextAt(g,Strings.T(State==null?"Disconnected":State.ConnectionText),13,false,Theme.Text,new Rectangle(106,43,Width-111,24));
+            Theme.Lines(g,State!=null&&State.UsbMode!="Not reported"?State.UsbMode.Replace("/","/\n"):Strings.T("USB mode\nnot reported"),12,Theme.Muted,new Rectangle(89,80,Width-97,45));
         }
     }
     public sealed class CameraOverview : RoundedCard
@@ -77,30 +81,32 @@ namespace Xt30Probe.Presentation
         {
             base.OnPaint(e);Graphics g=e.Graphics;int actionWidth=Width<770?151:170;int actionX=Width-actionWidth-27;int pictureWidth=Width<770?160:245;int infoX=pictureWidth+49;
             Assets.Camera(g,new Rectangle(24,30,pictureWidth,195));
-            Theme.Dot(g,infoX,29,CameraStatusCard.StateColor(State));Theme.TextAt(g,State==null?"Looking for camera…":State.ConnectionText,17,true,Theme.Text,new Rectangle(infoX+19,18,actionX-infoX-28,30));
-            string subtitle=State!=null&&State.Historical?"Last scan data · camera is not connected":State!=null&&State.UsbMode!="Not reported"?State.UsbMode:"USB mode not reported by the camera";
+            Theme.Dot(g,infoX,29,CameraStatusCard.StateColor(State));Theme.TextAt(g,Strings.T(State==null?"Looking for camera…":State.ConnectionText),17,true,Theme.Text,new Rectangle(infoX+19,18,actionX-infoX-28,30));
+            string subtitle=State!=null&&State.Historical?Strings.T("Last scan data · camera is not connected"):State!=null&&State.UsbMode!="Not reported"?State.UsbMode:Strings.T("USB mode not reported by the camera");
             Theme.TextAt(g,subtitle,12,false,Theme.Text,new Rectangle(infoX,52,actionX-infoX-22,24));
             string[] labels={"Model","Firmware","USB Mode","VID / PID","Protocol","Status"};
-            string[] values=State==null?new string[]{"—","—","Not reported","— / —","Not scanned","Waiting for camera"}:new string[]{State.Name,State.Firmware,State.UsbMode,State.VidPid,State.Protocol,State.Status};
+            string[] values=State==null?new string[]{"—","—",Strings.T("Not reported"),"— / —",Strings.T("Not scanned"),Strings.T("Waiting for camera")}:new string[]{State.Name,State.Firmware,State.UsbMode,State.VidPid,Strings.T(State.Protocol),Strings.T(State.Status)};
             int labelWidth=Width<770?76:105;
-            for(int i=0;i<labels.Length;i++){Theme.TextAt(g,labels[i],12,false,Theme.Text,new Rectangle(infoX,89+i*27,labelWidth-5,22));Theme.TextAt(g,values[i],12,false,Theme.Text,new Rectangle(infoX+labelWidth,89+i*27,Math.Max(40,actionX-infoX-labelWidth-24),22));}
+            for(int i=0;i<labels.Length;i++){Theme.TextAt(g,Strings.T(labels[i]),12,false,Theme.Text,new Rectangle(infoX,89+i*27,labelWidth-5,22));Theme.TextAt(g,values[i],12,false,Theme.Text,new Rectangle(infoX+labelWidth,89+i*27,Math.Max(40,actionX-infoX-labelWidth-24),22));}
             using(Pen p=new Pen(Theme.Border))g.DrawLine(p,actionX-22,60,actionX-22,245);
-            Theme.TextAt(g,"ACTIONS",10,false,Theme.Muted,new Rectangle(actionX,55,actionWidth,20));
+            Theme.TextAt(g,Strings.T("ACTIONS"),10,false,Theme.Muted,new Rectangle(actionX,55,actionWidth,20));
         }
     }
     public sealed class QuickHelp : RoundedCard
     {
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);Graphics g=e.Graphics;Theme.Icon(g,"Book",new Rectangle(23,21,21,21),Theme.Text);Theme.TextAt(g,"Quick Help",15,true,Theme.Text,new Rectangle(55,16,150,30));
+            base.OnPaint(e);Graphics g=e.Graphics;Theme.Icon(g,"Book",new Rectangle(23,21,21,21),Theme.Text);Theme.TextAt(g,Strings.T("Quick Help"),15,true,Theme.Text,new Rectangle(55,16,150,30));
+            // Libellés du menu de l'appareil : traduits comme le boîtier les affiche
+            // dans la langue correspondante.
             string[] steps={"MENU","SET UP","CONNECTION SETTING","USB CONNECTION MODE"};
-            for(int i=0;i<steps.Length;i++)Theme.TextAt(g,steps[i],10,false,Theme.Text,new Rectangle(22,61+i*22,163,20));
-            Theme.Lines(g,"USB RAW CONV./\nBACKUP RESTORE",11,Theme.Green,new Rectangle(22,153,156,38));
+            for(int i=0;i<steps.Length;i++)Theme.TextAt(g,Strings.T(steps[i]),10,false,Theme.Text,new Rectangle(22,61+i*22,163,20));
+            Theme.Lines(g,Strings.T("USB RAW CONV./\nBACKUP RESTORE"),11,Theme.Green,new Rectangle(22,153,156,38));
             using(Pen p=new Pen(Theme.Border))g.DrawLine(p,188,63,188,193);
             int diagram=Width>=780?265:0;int textWidth=Width-230-diagram;
-            Theme.Lines(g,"For full communication with your X-T30, please set the USB CONNECTION MODE to:",13,Theme.Text,new Rectangle(212,63,textWidth,50));
+            Theme.Lines(g,Strings.T("For full communication with your X-T30, please set the USB CONNECTION MODE to:"),13,Theme.Text,new Rectangle(212,63,textWidth,50));
             Theme.Lines(g,"USB RAW CONV./BACKUP RESTORE",13,Theme.Green,new Rectangle(212,115,textWidth,39));
-            Theme.TextAt(g,"Then turn the camera off and on again.",13,false,Theme.Text,new Rectangle(212,160,textWidth,25));
+            Theme.TextAt(g,Strings.T("Then turn the camera off and on again."),13,false,Theme.Text,new Rectangle(212,160,textWidth,25));
             if(diagram>0)
             {
                 int x=Width-278;Theme.Round(g,new Rectangle(x+218,87,28,47),Color.White,Color.LightGray,8);Theme.Round(g,new Rectangle(x+177,51,61,145),Color.White,Color.LightGray,7);Theme.Round(g,new Rectangle(x+180,43,37,12),Color.White,Color.LightGray,2);
@@ -114,11 +120,14 @@ namespace Xt30Probe.Presentation
     {
         public ReadOnlyNotice(){FillColor=Color.FromArgb(255,249,232);BorderColor=Color.FromArgb(242,216,154);Radius=8;}
         protected override void OnPaint(PaintEventArgs e)
-        {base.OnPaint(e);Theme.Icon(e.Graphics,"Lock",new Rectangle(16,15,18,18),Theme.Amber);Theme.TextAt(e.Graphics,"READ ONLY",12,true,Theme.Text,new Rectangle(43,11,Width-50,27));Theme.Lines(e.Graphics,"Direct camera slot access is currently unavailable.\nWriting to the camera is disabled.",12,Theme.Text,new Rectangle(21,46,Width-39,61));}
+        {base.OnPaint(e);Theme.Icon(e.Graphics,"Lock",new Rectangle(16,15,18,18),Theme.Amber);Theme.TextAt(e.Graphics,Strings.T("READ ONLY"),12,true,Theme.Text,new Rectangle(43,11,Width-50,27));Theme.Lines(e.Graphics,Strings.T("This application only reads the camera. It never sends a write command.\nA new settings file is loaded by Fujifilm's own Tether App."),12,Theme.Text,new Rectangle(21,46,Width-39,61));}
     }
     public sealed class CustomSlotRow : Control
     {
         public readonly CustomSlot Slot;
+        // Recette prévue pour cette banque, choisie dans le panneau de préparation.
+        // Elle n'est pas encore dans l'appareil : elle s'affiche comme une intention.
+        public Recipe Planned;
         public event Action<Recipe> OpenRecipe;
         public CustomSlotRow(CustomSlot slot)
         {Slot=slot;Height=90;BackColor=Color.White;Cursor=Cursors.Hand;TabStop=true;AllowDrop=false;AccessibleRole=AccessibleRole.PushButton;AccessibleName="C"+slot.Number+", "+slot.Source+", "+slot.Recipe.Name;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);}
@@ -138,9 +147,17 @@ namespace Xt30Probe.Presentation
             }
             Theme.TextAt(g,line2,12,false,Theme.Text,new Rectangle(142,42,Width-175,20));
             bool camera=Slot.Source==DataSource.CAMERA;
-            string provenance=camera?"CAMERA":Slot.Source.ToString();
-            if(camera&&Slot.Recipe.MatchedLibraryRecipe!=null)provenance+="  ·  matches \""+Slot.Recipe.MatchedLibraryRecipe.Name+"\" in library";
-            Theme.TextAt(g,provenance,9,true,camera?Theme.Green:Theme.Muted,new Rectangle(142,64,Width-175,15));
+            string provenance=Strings.T(camera?"CAMERA":Slot.Source.ToString());
+            if(camera&&Slot.Recipe.MatchedLibraryRecipe!=null)provenance+="  ·  "+Strings.T("matches \"{0}\" in library",Slot.Recipe.MatchedLibraryRecipe.Name);
+            // Une seule ligne à cet endroit : soit la provenance, soit — quand une
+            // recette est prévue pour cette banque — ce que l'envoi y mettrait.
+            if(Planned!=null)
+            {
+                string want=Xt30Probe.AppModel.CameraBankFile.BuildBankName(Planned,Planned.Name);
+                using(SolidBrush b=new SolidBrush(Theme.Green))g.FillRectangle(b,0,10,3,Height-20);
+                Theme.TextAt(g,"→ "+want,11,true,Theme.Green,new Rectangle(142,64,Width-175,15));
+            }
+            else Theme.TextAt(g,provenance,9,true,camera?Theme.Green:Theme.Muted,new Rectangle(142,64,Width-175,15));
             Theme.Icon(g,"More",new Rectangle(Width-33,35,18,20),Theme.Muted);
             using(Pen p=new Pen(Color.FromArgb(239,239,239)))g.DrawLine(p,0,Height-1,Width,Height-1);
             if(Focused&&ShowFocusCues)ControlPaint.DrawFocusRectangle(g,new Rectangle(3,3,Width-7,Height-7));
@@ -167,9 +184,26 @@ namespace Xt30Probe.Presentation
             _tips.SetToolTip(_refresh,fromCamera?"Re-read the decoded settings file from disk. No camera command is sent.":"Refresh local display only. Camera slot reading is unavailable.");
             // La bibliothèque reconstruit sa liste de slots : il faut recréer les lignes,
             // sinon elles resteraient liées aux anciens objets.
-            _refresh.Click+=delegate{if(_library!=null)_library.ReloadCameraBanks();BuildRows();PerformLayout();Invalidate();};
+            _refresh.Click+=delegate{if(_library!=null)_library.ReloadCameraBanks();Reload();};
             _more.AccessibleName="About camera custom settings";
             _more.Click+=delegate{MessageBox.Show(this,Explain(),"Camera Custom Settings",MessageBoxButtons.OK,MessageBoxIcon.Information);};
+        }
+        // Reconstruit les lignes après un rechargement des banques : elles pointent
+        // sur de nouveaux objets, les anciennes afficheraient l'état précédent.
+        public void Reload(){BuildRows();ApplyPlan();PerformLayout();Invalidate();}
+
+        // Recettes prévues par le panneau de préparation, affichées en direct.
+        Recipe[] _planned;
+        public void SetPlanned(Recipe[] planned){_planned=planned;ApplyPlan();}
+        void ApplyPlan()
+        {
+            for(int i=0;i<7;i++)
+            {
+                if(_rows[i]==null)continue;
+                Recipe want=_planned!=null&&i<_planned.Length?_planned[i]:null;
+                if(_rows[i].Planned==want)continue;
+                _rows[i].Planned=want;_rows[i].Invalidate();
+            }
         }
         void BuildRows()
         {
@@ -202,11 +236,11 @@ namespace Xt30Probe.Presentation
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            Theme.TextAt(e.Graphics,"Camera Custom Settings",15,true,Theme.Text,new Rectangle(19,18,Width-103,26));
+            Theme.TextAt(e.Graphics,Strings.T("Camera Custom Settings"),15,true,Theme.Text,new Rectangle(19,18,Width-103,26));
             bool fromCamera=_library!=null&&_library.SlotsAreFromCamera;
             string subtitle=fromCamera
-                ?"READ FROM CAMERA · "+_library.CameraBanks.Model+" · "+_library.CameraBanks.ReadAt.ToString("dd/MM/yyyy HH:mm")
-                :"LOCAL DEMONSTRATION";
+                ?Strings.T("READ FROM CAMERA · {0} · {1}",_library.CameraBanks.Model,_library.CameraBanks.ReadAt.ToString("dd/MM/yyyy HH:mm"))
+                :Strings.T("LOCAL DEMONSTRATION");
             Theme.TextAt(e.Graphics,subtitle,9,false,fromCamera?Theme.Green:Theme.Muted,new Rectangle(19,43,Width-110,17));
         }
         protected override void Dispose(bool disposing){if(disposing)_tips.Dispose();base.Dispose(disposing);}
@@ -221,8 +255,8 @@ namespace Xt30Probe.Presentation
         {
             base.OnPaint(e);using(Pen p=new Pen(Theme.Border))e.Graphics.DrawLine(p,0,0,Width,0);
             Color color=CameraStatusCard.StateColor(State);Theme.Dot(e.Graphics,30,19,color);
-            Theme.TextAt(e.Graphics,State==null?"Waiting for camera…":State.Message,12,false,Theme.Muted,new Rectangle(51,0,Math.Max(150,Width-485),Height));
-            Theme.TextAt(e.Graphics,"Last scan: "+(State!=null&&State.LastScan.HasValue?State.LastScan.Value.ToString("dd/MM/yyyy  HH:mm"):"—"),12,false,Theme.Muted,new Rectangle(Width-391,0,232,Height));
+            Theme.TextAt(e.Graphics,State==null?Strings.T("Waiting for camera…"):Strings.T(State.Message),12,false,Theme.Muted,new Rectangle(51,0,Math.Max(150,Width-485),Height));
+            Theme.TextAt(e.Graphics,Strings.T("Last scan: {0}",State!=null&&State.LastScan.HasValue?State.LastScan.Value.ToString("dd/MM/yyyy  HH:mm"):"—"),12,false,Theme.Muted,new Rectangle(Width-391,0,232,Height));
         }
     }
 }

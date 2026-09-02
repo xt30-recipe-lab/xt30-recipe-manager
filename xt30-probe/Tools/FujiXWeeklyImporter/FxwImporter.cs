@@ -91,7 +91,13 @@ namespace FxwImporter
     {
         public string Url;
         public string Generation;
-        public Catalog(string url, string generation) { Url = url; Generation = generation; }
+        // Catalogue dont les recettes sont réalisables sur un X-T30 : les
+        // générations X-Trans I à IV n'utilisent que des réglages présents sur
+        // ce boîtier. X-Trans V introduit des simulations qu'il n'a pas.
+        public bool Xt30Relevant;
+        public Catalog(string url, string generation) : this(url, generation, false) { }
+        public Catalog(string url, string generation, bool xt30Relevant)
+        { Url = url; Generation = generation; Xt30Relevant = xt30Relevant; }
     }
 
     public class FxwRecipe
@@ -116,10 +122,10 @@ namespace FxwImporter
         const string ListXTrans3 = "https://fujixweekly.com/fujifilm-x-trans-iii-recipes/";
         static readonly Catalog[] AllCatalogs = {
             new Catalog("https://fujixweekly.com/fujifilm-x-trans-v-recipes/", "X-Trans V"),
-            new Catalog(ListXTrans4, "X-Trans IV"),
-            new Catalog(ListXTrans3, "X-Trans III"),
-            new Catalog("https://fujixweekly.com/fujifilm-x-trans-ii-recipes/", "X-Trans II"),
-            new Catalog("https://fujixweekly.com/fujifilm-x-trans-i-recipes/", "X-Trans I"),
+            new Catalog(ListXTrans4, "X-Trans IV", true),
+            new Catalog(ListXTrans3, "X-Trans III", true),
+            new Catalog("https://fujixweekly.com/fujifilm-x-trans-ii-recipes/", "X-Trans II", true),
+            new Catalog("https://fujixweekly.com/fujifilm-x-trans-i-recipes/", "X-Trans I", true),
             new Catalog("https://fujixweekly.com/fujifilm-exr-cmos-film-simulation-recipes/", "EXR-CMOS"),
             new Catalog("https://fujixweekly.com/fujifilm-bayer-recipes/", "Bayer"),
             new Catalog("https://fujixweekly.com/fujifilm-gfx-recipes/", "GFX"),
@@ -133,6 +139,8 @@ namespace FxwImporter
         };
 
         static string LibraryDir;
+        // Fichier texte d'URL d'articles, une par ligne (option --urls).
+        static string UrlListFile;
         static List<string> LogLines = new List<string>();
 
         static void Log(string fmt, params object[] args)
@@ -158,6 +166,7 @@ namespace FxwImporter
                 else if (args[i] == "--full" || args[i] == "--xt30") { allCatalogs = false; limit = -1; }
                 else if (args[i] == "--all") { allCatalogs = true; }
                 else if (args[i] == "--permission-confirmed") { permissionConfirmed = true; }
+                else if (args[i] == "--urls" && i + 1 < args.Length) { UrlListFile = Path.GetFullPath(args[++i]); }
                 else if (args[i] == "--out" && i + 1 < args.Length) { LibraryDir = Path.GetFullPath(args[++i]); }
                 else { Console.Error.WriteLine("Argument inconnu : " + args[i]); PrintHelp(); return 2; }
             }
@@ -175,13 +184,29 @@ namespace FxwImporter
             List<RecipeLink> links = new List<RecipeLink>();
             List<object> failed = new List<object>();
             List<Catalog> selectedCatalogs = new List<Catalog>();
-            foreach (Catalog catalog in AllCatalogs)
-                if (allCatalogs || catalog.Url == ListXTrans4 || catalog.Url == ListXTrans3)
-                    selectedCatalogs.Add(catalog);
-            foreach (Catalog catalog in selectedCatalogs)
+            if (UrlListFile != null)
             {
-                try { CollectLinks(catalog.Url, catalog.Generation, links); }
-                catch (Exception ex) { Log("ECHEC liste {0} : {1}", catalog.Generation, ex.Message); failed.Add(Fail(catalog.Url, ex.Message)); }
+                // Liste d'articles fournie explicitement (une URL par ligne). Utile pour
+                // reprendre les recettes citées par une page de sélection éditoriale, qui
+                // n'apparaissent pas forcément dans les catalogues par génération.
+                foreach (string raw in File.ReadAllLines(UrlListFile))
+                {
+                    string url = raw.Trim();
+                    if (url.Length == 0 || url.StartsWith("#")) continue;
+                    links.Add(new RecipeLink { Url = url, SourceListUrl = UrlListFile, Group = "Liste fournie" });
+                }
+                Log("Liste fournie : {0} URL(s) depuis {1}", links.Count, UrlListFile);
+            }
+            else
+            {
+                foreach (Catalog catalog in AllCatalogs)
+                    if (allCatalogs || catalog.Xt30Relevant)
+                        selectedCatalogs.Add(catalog);
+                foreach (Catalog catalog in selectedCatalogs)
+                {
+                    try { CollectLinks(catalog.Url, catalog.Generation, links); }
+                    catch (Exception ex) { Log("ECHEC liste {0} : {1}", catalog.Generation, ex.Message); failed.Add(Fail(catalog.Url, ex.Message)); }
+                }
             }
 
             // Déduplication par URL canonique de lien
@@ -231,7 +256,8 @@ namespace FxwImporter
                 }
             }
 
-            WriteIndexes(recipes, failed, all.Count, selectedCatalogs, allCatalogs ? "ALL_CATALOGS" : "XT30_RELEVANT");
+            WriteIndexes(recipes, failed, all.Count, selectedCatalogs,
+                UrlListFile != null ? "CURATED_SELECTION" : allCatalogs ? "ALL_CATALOGS" : "XT30_RELEVANT");
             Log("");
             Log("Terminé : {0} recettes extraites, {1} échecs, aucune image collectée.", recipes.Count, failed.Count);
             return 0;
@@ -328,7 +354,8 @@ namespace FxwImporter
             // Garde anti-éditorial : une page recette doit fournir la simulation
             // ET un minimum de réglages ; sinon on la rejette explicitement.
             if (!r.Settings.ContainsKey("filmSimulation") || r.Settings.Count < 4) return null;
-            if (Regex.IsMatch(r.Name, "^(which|why|how|when|top \\d|best |comparing|ranking|no edit)", RegexOptions.IgnoreCase)) return null;
+            // « Comments on: … » est le flux de commentaires d'un article, pas une recette.
+            if (Regex.IsMatch(r.Name, "^(which|why|how|when|top \\d|best |the best |comparing|ranking|no edit|comments on)", RegexOptions.IgnoreCase)) return null;
 
             DetectCameras(body, r);
             Classify(r);
@@ -561,12 +588,16 @@ namespace FxwImporter
             foreach (FxwRecipe r in recipes) items.Add(RecipeToJson(r));
             Dictionary<string, object> index = new Dictionary<string, object> {
                 { "generatedAt", DateTime.Now.ToString("o") },
+                { "site", "Fuji X Weekly" }, { "idPrefix", "fxw-" },
                 { "source", "Fuji X Weekly (recipe metadata; no images copied)" },
                 { "target", "Fujifilm X-T30 (first generation)" },
                 { "scope", scope },
                 { "detectedLinks", detected }, { "extracted", recipes.Count },
                 { "images", 0 }, { "recipes", items } };
-            File.WriteAllText(Path.Combine(LibraryDir, "index", "fuji_x_weekly_xt30_full.json"), Json.Serialize(index), new UTF8Encoding(false));
+            // Un import par liste d'URL écrit son propre index : il complète le
+            // catalogue par génération au lieu de l'écraser.
+            string stem = UrlListFile == null ? "fuji_x_weekly_xt30_full" : "fuji_x_weekly_selection";
+            File.WriteAllText(Path.Combine(LibraryDir, "index", stem + ".json"), Json.Serialize(index), new UTF8Encoding(false));
 
             // CSV
             StringBuilder csv = new StringBuilder();
@@ -581,7 +612,7 @@ namespace FxwImporter
                 for (int i = 0; i < cols.Length; i++) { if (cols[i] == null) cols[i] = ""; cols[i] = cols[i].Replace(';', ','); }
                 csv.AppendLine(string.Join(";", cols));
             }
-            File.WriteAllText(Path.Combine(LibraryDir, "index", "fuji_x_weekly_xt30_full.csv"), csv.ToString(), new UTF8Encoding(true));
+            File.WriteAllText(Path.Combine(LibraryDir, "index", stem + ".csv"), csv.ToString(), new UTF8Encoding(true));
 
             // Rapports
             int compat = 0, partial = 0, incompatible = 0, unverified = 0, verified = 0;

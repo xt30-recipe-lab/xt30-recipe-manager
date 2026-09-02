@@ -126,15 +126,37 @@ namespace Xt30Probe.Presentation
             if (!string.IsNullOrEmpty(IconName)) Theme.Icon(g, IconName, new Rectangle(string.IsNullOrEmpty(Text)?(Width-18)/2:10,(Height-18)/2,18,18),text);
             Rectangle bounds = new Rectangle(string.IsNullOrEmpty(IconName) ? 3 : 34,0, Width-(string.IsNullOrEmpty(IconName)?6:38),Height);
             g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            using(SolidBrush brush=new SolidBrush(text))using(StringFormat format=new StringFormat(){Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})g.DrawString(Text,Theme.Font(13,Primary),brush,bounds,format);
+                        // Text reste la clé anglaise (les comparaisons de l'application s'appuient
+            // dessus) ; seule la peinture passe par la traduction.
+            using(SolidBrush brush=new SolidBrush(text))using(StringFormat format=new StringFormat(){Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})g.DrawString(Strings.T(Text),Theme.Font(13,Primary),brush,bounds,format);
             if(Focused&&ShowFocusCues) ControlPaint.DrawFocusRectangle(g,new Rectangle(3,3,Width-7,Height-7),text,fill);
+        }
+    }
+    public static class Ui
+    {
+        // Affiche des libellés traduits tout en gardant la valeur anglaise dans
+        // l'élément : les filtres et les enregistrements continuent de fonctionner.
+        public static void TranslateItems(ComboBox combo)
+        {
+            combo.DrawMode = DrawMode.OwnerDrawFixed;
+            combo.DrawItem += delegate(object sender, DrawItemEventArgs e)
+            {
+                e.DrawBackground();
+                if (e.Index >= 0 && e.Index < combo.Items.Count)
+                    using (SolidBrush brush = new SolidBrush(e.ForeColor))
+                        e.Graphics.DrawString(Strings.T(Convert.ToString(combo.Items[e.Index])), e.Font, brush, e.Bounds.X + 1, e.Bounds.Y + 1);
+                e.DrawFocusRectangle();
+            };
         }
     }
     public sealed class StatusBadge : Control
     {
         public StatusBadge() { Size=new Size(117,34); AccessibleName="Read only. Camera writing is disabled."; }
+        // « LECTURE SEULE » est plus large que « READ ONLY » : la pastille se
+        // dimensionne sur son libellé traduit au lieu d'être tronquée.
+        public int PreferredWidth { get { return TextRenderer.MeasureText(Strings.T("READ ONLY"),Theme.Font(13,true)).Width+48; } }
         protected override void OnPaint(PaintEventArgs e)
-        { e.Graphics.SmoothingMode=SmoothingMode.AntiAlias; Theme.Round(e.Graphics,ClientRectangle,Color.FromArgb(236,237,238),Color.FromArgb(236,237,238),10); Theme.Dot(e.Graphics,13,13,Theme.Green); Theme.TextAt(e.Graphics,"READ ONLY",13,true,Theme.Text,new Rectangle(32,0,Width-34,Height)); }
+        { e.Graphics.SmoothingMode=SmoothingMode.AntiAlias; Theme.Round(e.Graphics,ClientRectangle,Color.FromArgb(236,237,238),Color.FromArgb(236,237,238),10); Theme.Dot(e.Graphics,13,13,Theme.Green); Theme.TextAt(e.Graphics,Strings.T("READ ONLY"),13,true,Theme.Text,new Rectangle(32,0,Width-34,Height)); }
     }
     public sealed class SearchBar : RoundedCard
     {
@@ -143,7 +165,7 @@ namespace Xt30Probe.Presentation
         public readonly TextBox Input = new TextBox();
         public event EventHandler SearchChanged;
         public SearchBar()
-        { Height=40; Input.BorderStyle=BorderStyle.None; Input.Font=Theme.Font(14,false); Input.BackColor=Color.White; Input.AccessibleName="Search recipes";Input.HandleCreated+=delegate{SendMessage(Input.Handle,0x1501,new IntPtr(1),"Search recipes...");}; Controls.Add(Input); Input.TextChanged+=delegate{Invalidate();if(SearchChanged!=null)SearchChanged(this,EventArgs.Empty);}; }
+        { Height=40; Input.BorderStyle=BorderStyle.None; Input.Font=Theme.Font(14,false); Input.BackColor=Color.White; Input.AccessibleName="Search recipes";Input.HandleCreated+=delegate{SendMessage(Input.Handle,0x1501,new IntPtr(1),Strings.T("Search recipes..."));}; Controls.Add(Input); Input.TextChanged+=delegate{Invalidate();if(SearchChanged!=null)SearchChanged(this,EventArgs.Empty);}; }
         protected override void OnLayout(LayoutEventArgs e) { base.OnLayout(e); Input.SetBounds(37,11,Math.Max(40,Width-50),23); }
         protected override void OnPaint(PaintEventArgs e) { base.OnPaint(e); Theme.Icon(e.Graphics,"Search",new Rectangle(12,12,17,17),Theme.Muted); }
     }

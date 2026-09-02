@@ -13,6 +13,12 @@ namespace Xt30Probe.AppModel
         public string Name = "New Recipe";
         public string Category = "Vintage";
         public string Cover = "pacific";
+        // "Photo" : recette destinée aux banques C1-C7.
+        // "Video" : recette destinée au mode film. Le X-T30 ne range AUCUN réglage
+        // vidéo dans son fichier de sauvegarde ni dans C1-C7 : ces recettes se
+        // reportent à la main dans les menus du boîtier, et ne sont jamais écrites.
+        public string Kind = "Photo";
+        public bool IsVideo { get { return Kind == "Video"; } }
         public bool Favorite;
         public bool Demonstration;
         public DataSource Source = DataSource.LOCAL;
@@ -27,6 +33,9 @@ namespace Xt30Probe.AppModel
         public Recipe MatchedLibraryRecipe;
         public bool IsFromCamera { get { return Source == DataSource.CAMERA; } }
         public bool IsImported { get { return SourceSite != "LOCAL" && !IsFromCamera; } }
+        // Toutes les photos publiées avec la recette, couverture en premier.
+        // Vide pour une recette locale : seule sa couverture existe.
+        public readonly List<string> Gallery = new List<string>();
         public Dictionary<string, string> Values = new Dictionary<string, string>();
         public string Get(string key) { string value; return Values.TryGetValue(key, out value) ? value : "Not specified"; }
         public string Simulation { get { return Get("Film Simulation"); } }
@@ -43,6 +52,14 @@ namespace Xt30Probe.AppModel
             "Monochromatic Color", "Grain Effect", "Color Chrome Effect", "White Balance",
             "WB Shift R", "WB Shift B", "Highlight", "Shadow", "Color", "Sharpness", "Noise Reduction"
         };
+        // Réglages d'image du mode film. Le grain n'y figure pas : il ne fait pas
+        // partie des réglages d'image appliqués au film sur ce boîtier.
+        public static readonly string[] VideoParameterOrder = {
+            "Movie Mode", "F-Log", "ISO", "Film Simulation", "Monochromatic Color",
+            "White Balance", "WB Shift R", "WB Shift B", "Dynamic Range",
+            "Color Chrome Effect", "Highlight", "Shadow", "Color", "Sharpness", "Noise Reduction"
+        };
+        public string[] Parameters { get { return IsVideo ? VideoParameterOrder : ParameterOrder; } }
         public static readonly string[] AdditionalParameters = { "Color Chrome FX Blue", "Clarity", "Grain Size" };
         public List<string> CompatibilityIssues()
         {
@@ -96,9 +113,17 @@ namespace Xt30Probe.AppModel
         public bool ExtendedScan;
         public event EventHandler Changed;
         public string LoadWarning = "";
+        // Étapes du chargement, rapportées à l'écran d'ouverture. Volontairement un
+        // simple délégué : ce fichier ne connaît rien de l'interface.
+        // La clé anglaise et ses arguments sont transmis séparément : c'est
+        // l'interface qui traduit et met en forme, ce fichier n'en sait rien.
+        public static Action<string, object[]> Progress;
+        static void Report(string step, params object[] args) { if (Progress != null) Progress(step, args); }
+
         public RecipeLibrary(string path)
         {
             DirectoryPath = path;
+            Report("Loading your recipes…");
             string file = Path.Combine(path, "library.json");
             if (File.Exists(file))
             {
@@ -110,6 +135,7 @@ namespace Xt30Probe.AppModel
                         Dictionary<string, object> d = (Dictionary<string, object>)item;
                         Recipe r = new Recipe(); r.Id = Text(d, "id"); r.Name = Text(d, "name"); r.Category = Text(d, "category");
                         r.Cover = Text(d, "cover"); r.Favorite = Text(d, "favorite") == "True"; r.Demonstration = Text(d, "demonstration") == "True";
+                        r.Kind = Text(d, "kind") == "Video" ? "Video" : "Photo";
                         Dictionary<string, object> values = (Dictionary<string, object>)d["values"];
                         foreach (var v in values) r.Values[v.Key] = Convert.ToString(v.Value);
                         Recipes.Add(r);
@@ -124,9 +150,12 @@ namespace Xt30Probe.AppModel
                 }
             }
             if (Recipes.Count == 0) Seed();
+            Report("Loading the imported recipe catalogues…");
             LoadFujiXWeekly();
+            Report("Reading the decoded camera banks…");
             CameraBanks = CameraBanksSnapshot.Load(AppDomain.CurrentDomain.BaseDirectory);
             BuildPacks();
+            Report("{0} recipes ready", Recipes.Count);
         }
 
         // Banques réellement lues dans le boîtier (null tant qu'aucune lecture n'a eu lieu).
@@ -142,16 +171,36 @@ namespace Xt30Probe.AppModel
         // Bibliothèque importée Fuji X Weekly (offline, lecture seule, distincte
         // des recettes locales : jamais réécrite dans library.json).
         public int ImportedCount;
+        // Charge TOUS les index présents dans library/index/, quelle que soit leur
+        // source (Fuji X Weekly, filmsimrecipes…). Chaque index déclare son propre
+        // nom de site ; rien n'est deviné.
         void LoadFujiXWeekly()
         {
             string libraryRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "library");
-            string indexFile = Path.Combine(libraryRoot, "index", "fuji_x_weekly_xt30_full.json");
-            if (!File.Exists(indexFile)) return;
+            string indexDir = Path.Combine(libraryRoot, "index");
+            if (!Directory.Exists(indexDir)) return;
+            HashSet<string> favorites = LoadImportedFavorites();
+            HashSet<string> seen = new HashSet<string>();
+            string[] indexes = Directory.GetFiles(indexDir, "*.json");
+            Array.Sort(indexes);
+            foreach (string file in indexes) LoadIndexFile(file, libraryRoot, favorites, seen);
+        }
+
+        void LoadIndexFile(string indexFile, string libraryRoot, HashSet<string> favorites, HashSet<string> seen)
+        {
             try
             {
                 Dictionary<string, object> root = Json.Parse(File.ReadAllText(indexFile)) as Dictionary<string, object>;
-                HashSet<string> favorites = LoadImportedFavorites();
-                foreach (object item in (List<object>)root["recipes"])
+                if (root == null) return;
+                object list;
+                if (!root.TryGetValue("recipes", out list) || !(list is List<object>)) return;
+                // Le nom du site vient de l'index lui-même ; à défaut, on retombe sur
+                // Fuji X Weekly pour rester compatible avec les index déjà produits.
+                string site = Text(root, "site");
+                if (site == "") site = "Fuji X Weekly";
+                string prefix = Text(root, "idPrefix");
+                if (prefix == "") prefix = "fxw-";
+                foreach (object item in (List<object>)list)
                 {
                     Dictionary<string, object> d = (Dictionary<string, object>)item;
                     Dictionary<string, object> source = Sub(d, "source");
@@ -159,10 +208,12 @@ namespace Xt30Probe.AppModel
                     Dictionary<string, object> settings = Sub(d, "settings");
                     Dictionary<string, object> images = Sub(d, "images");
                     Recipe r = new Recipe();
-                    r.Id = "fxw-" + Text(d, "slug");
+                    r.Id = prefix + Text(d, "slug");
+                    if (seen.Contains(r.Id)) continue;   // même recette dans deux index
+                    seen.Add(r.Id);
                     r.Name = CleanRecipeName(Text(d, "name"));
-                    r.Category = "Fuji X Weekly";
-                    r.SourceSite = "FUJI X WEEKLY";
+                    r.Category = site;
+                    r.SourceSite = site.ToUpperInvariant();
                     r.ArticleUrl = Text(source, "articleUrl");
                     r.Author = Text(source, "author");
                     r.PublishedAt = Text(source, "publishedAt");
@@ -171,6 +222,18 @@ namespace Xt30Probe.AppModel
                     r.Favorite = favorites.Contains(r.Id);
                     string cover = Text(images, "cover");
                     r.Cover = cover == "" ? "pacific" : Path.Combine(libraryRoot, cover.Replace('/', '\\'));
+                    // Galerie : la couverture puis les autres photos de l'article,
+                    // dans l'ordre publié. Un fichier absent est simplement ignoré.
+                    if (cover != "") r.Gallery.Add(r.Cover);
+                    object examples;
+                    if (images.TryGetValue("examples", out examples) && examples is List<object>)
+                        foreach (object entry in (List<object>)examples)
+                        {
+                            string relative = Convert.ToString(entry);
+                            if (relative == "") continue;
+                            string full = Path.Combine(libraryRoot, relative.Replace('/', '\\'));
+                            if (!r.Gallery.Contains(full)) r.Gallery.Add(full);
+                        }
                     MapSetting(r, settings, "iso", "ISO");
                     MapSetting(r, settings, "dynamicRange", "Dynamic Range");
                     MapSetting(r, settings, "dRangePriority", "Dynamic Range Priority");
@@ -195,7 +258,9 @@ namespace Xt30Probe.AppModel
             }
             catch (Exception ex)
             {
-                if (LoadWarning == "") LoadWarning = "The Fuji X Weekly library could not be read: " + ex.Message;
+                // Un index illisible ne doit pas empêcher les autres de se charger.
+                if (LoadWarning == "")
+                    LoadWarning = "An imported recipe index could not be read (" + Path.GetFileName(indexFile) + "): " + ex.Message;
             }
         }
         static string CleanRecipeName(string name)
@@ -279,7 +344,8 @@ namespace Xt30Probe.AppModel
             List<Recipe> localSeven = new List<Recipe>();
             for (int i = 0; i < 7; i++)
                 localSeven.Add(Recipes.Find(delegate(Recipe x) { return x.Id == packOrder[i]; })
-                    ?? Recipes.Find(delegate(Recipe x) { return !x.IsImported && !x.IsFromCamera; })
+                    // Une recette vidéo ne peut pas remplir une banque : elle n'en a pas les réglages.
+                    ?? Recipes.Find(delegate(Recipe x) { return !x.IsImported && !x.IsFromCamera && !x.IsVideo; })
                     ?? Recipes[i % Recipes.Count]);
             string[] names = { "SUMMER", "STREET", "NIGHT", "TRAVEL" };
             for (int p = 0; p < names.Length; p++)
@@ -304,8 +370,10 @@ namespace Xt30Probe.AppModel
                     case "Compatible":
                         return r.IsImported ? r.CompatStatus == "XT30_COMPATIBLE" : r.CompatibilityIssues().Count == 0;
                     case "Favorites": return r.Favorite;
-                    case "Fuji X Weekly": return r.IsImported;
+                    case "Imported": return r.IsImported;
                     case "Local": return !r.IsImported;
+                    case "Video": return r.IsVideo;
+                    case "Photo": return !r.IsVideo;
                     case "B&W": return r.IsBlackAndWhite;
                     case "Color": return !r.IsBlackAndWhite;
                     default: return filter == r.Category;
@@ -334,7 +402,7 @@ namespace Xt30Probe.AppModel
                 // seul leur favori (par identifiant) est persistant.
                 if (r.IsImported) { if (r.Favorite) importedFavorites.Add(r.Id); continue; }
                 items.Add(new Dictionary<string, object> {
-                    { "id", r.Id }, { "name", r.Name }, { "category", r.Category }, { "cover", r.Cover },
+                    { "id", r.Id }, { "name", r.Name }, { "category", r.Category }, { "cover", r.Cover }, { "kind", r.Kind },
                     { "favorite", r.Favorite }, { "demonstration", r.Demonstration }, { "source", "LOCAL" }, { "values", r.Values.ToDictionary(x => x.Key, x => (object)x.Value) }
                 });
             }
