@@ -132,12 +132,18 @@ namespace Xt30Probe.AppModel
             }
         }
 
-        public static int Tone(string value)   // highlight / shadow / sharpness
+        // Netteté : -4 à +4. Ton lumière et ton ombre : -2 à +4 seulement sur le
+        // X-T30 (la notice donne sept valeurs, +4 … -2). Même formule, amplitudes
+        // différentes : écrire -3 ou -4 en ton lumière produirait un code que le
+        // boîtier ne connaît pas.
+        public static int Tone(string value) { return Tone(value, -4, 4); }
+        public static int Tone(string value, int min, int max)
         {
             int v;
-            if (!TryNumber(value, out v) || v < -4 || v > 4) return -1;
+            if (!TryNumber(value, out v) || v < min || v > max) return -1;
             return 4 - v;
         }
+        public const int ToneFloorHighlightShadow = -2;
 
         public static int NoiseReduction(string value)
         {
@@ -363,8 +369,8 @@ namespace Xt30Probe.AppModel
             string tag = "C" + (slot + 1) + " ";
 
             Put(blob, b + 0, FilmSim(recipe.Get("Film Simulation")), tag + "Film Simulation", result);
-            Put(blob, b + RelHighlight, Tone(recipe.Get("Highlight")), tag + "Highlight", result);
-            Put(blob, b + RelShadow, Tone(recipe.Get("Shadow")), tag + "Shadow", result);
+            Put(blob, b + RelHighlight, Tone(recipe.Get("Highlight"), ToneFloorHighlightShadow, 4), tag + "Highlight", result);
+            Put(blob, b + RelShadow, Tone(recipe.Get("Shadow"), ToneFloorHighlightShadow, 4), tag + "Shadow", result);
             Put(blob, b + RelSharpness, Tone(recipe.Get("Sharpness")), tag + "Sharpness", result);
             Put(blob, b + RelColor, Color(recipe.Get("Color")), tag + "Color", result);
             Put(blob, b + RelNr, NoiseReduction(recipe.Get("Noise Reduction")), tag + "Noise Reduction", result);

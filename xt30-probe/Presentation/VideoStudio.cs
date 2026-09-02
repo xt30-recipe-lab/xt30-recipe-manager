@@ -12,8 +12,9 @@ namespace Xt30Probe.Presentation
     {
         public static readonly string[] MovieModes = { "4K 30P", "4K 25P", "4K 24P", "FHD 60P", "FHD 50P", "FHD 30P", "FHD 25P", "FHD 24P", "FHD 120P (high speed)" };
         public static readonly string[] LogModes = { "Off", "F-Log" };
-        // Réduction du bruit inter-image : réglage du menu vidéo, sans équivalent photo.
-        public static readonly string[] InterframeNr = { "Off", "Weak", "Strong" };
+        // Réduction du bruit inter-image : réglage du menu vidéo, sans équivalent
+        // photo. La notice ne donne que ON et OFF — pas de niveaux intermédiaires.
+        public static readonly string[] InterframeNr = { "Off", "On" };
         // Le mode film n'offre pas la priorité plage dynamique : pas de DR-P ici.
         public static readonly string[] MovieDynamicRanges = { "DR100", "DR200", "DR400" };
 
@@ -31,8 +32,12 @@ namespace Xt30Probe.Presentation
                 case "Grain Effect": return CameraBankFile.GrainEffects;
                 case "Color Chrome Effect": return CameraBankFile.ChromeEffects;
                 case "WB Shift R": case "WB Shift B": return CameraBankFile.Scale(-9, 9);
-                case "Highlight": case "Shadow": case "Color": case "Sharpness":
-                case "Noise Reduction": case "Monochromatic Color": return CameraBankFile.Scale(-4, 4);
+                // Le X-T30 s'arrête à -2 en ton lumière et ton ombre ; le réglage
+                // N&B (B&W ADJ) va lui de -9 à +9. Une seule échelle pour tout
+                // proposait des valeurs que le boîtier n'a pas.
+                case "Highlight": case "Shadow": return CameraBankFile.Scale(CameraBankFile.ToneFloorHighlightShadow, 4);
+                case "Monochromatic Color": return CameraBankFile.Scale(-9, 9);
+                case "Color": case "Sharpness": case "Noise Reduction": return CameraBankFile.Scale(-4, 4);
                 default: return null;   // ISO : texte libre
             }
         }

@@ -367,8 +367,8 @@ namespace Xt30Probe.Presentation
                 "These parameters are compatible with the X-T30 feature set. Camera transfer remains disabled.",
                     "Ces paramètres sont compatibles avec le X-T30. Cette application n'écrit pas dans l'appareil.",
                 "Stored on this computer only.", "Stocké uniquement sur cet ordinateur.",
-                "Read from your camera's settings file. Only what that file stores is shown; ISO, WB shift and exposure are not in it and stay unspecified.",
-                    "Lu dans le fichier de réglages de votre appareil. Seul ce que ce fichier contient est affiché ; l'ISO, le décalage de balance des blancs et l'exposition n'y sont pas et restent non précisés.",
+                "Read from your camera's settings file. Only the fields we have identified in it are shown; ISO, WB shift and exposure are not among them and stay unspecified.",
+                    "Lu dans le fichier de réglages de votre appareil. Seuls les champs que nous y avons identifiés sont affichés ; l'ISO, le décalage de balance des blancs et l'exposition n'en font pas partie et restent non précisés.",
                 // Noms de réglages
                 "ISO", "Sensibilité ISO",
                 "Dynamic Range", "Plage dynamique",
