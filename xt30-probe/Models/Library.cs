@@ -52,12 +52,17 @@ namespace Xt30Probe.AppModel
             "Monochromatic Color", "Grain Effect", "Color Chrome Effect", "White Balance",
             "WB Shift R", "WB Shift B", "Highlight", "Shadow", "Color", "Sharpness", "Noise Reduction"
         };
-        // Réglages d'image du mode film. Le grain n'y figure pas : il ne fait pas
-        // partie des réglages d'image appliqués au film sur ce boîtier.
+        // Réglages du menu MOVIE SETTING du X-T30, tels que la notice les liste :
+        // FILM SIMULATION, B&W ADJ (ici « Monochromatic Color »), WHITE BALANCE,
+        // DYNAMIC RANGE, HIGHLIGHT TONE, SHADOW TONE, COLOR, SHARPNESS, NOISE
+        // REDUCTION, INTERFRAME NR, F-Log RECORDING.
+        //
+        // Ni le grain ni le Color Chrome Effect n'y figurent : ce sont des réglages
+        // photo. Ne pas les proposer ici, ce serait envoyer chercher un menu absent.
         public static readonly string[] VideoParameterOrder = {
             "Movie Mode", "F-Log", "ISO", "Film Simulation", "Monochromatic Color",
             "White Balance", "WB Shift R", "WB Shift B", "Dynamic Range",
-            "Color Chrome Effect", "Highlight", "Shadow", "Color", "Sharpness",
+            "Highlight", "Shadow", "Color", "Sharpness",
             "Noise Reduction", "Interframe NR"
         };
         public string[] Parameters { get { return IsVideo ? VideoParameterOrder : ParameterOrder; } }

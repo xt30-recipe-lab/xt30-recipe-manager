@@ -201,7 +201,7 @@ namespace Xt30Probe.Presentation
             else{note=string.Join("\n",issues.ToArray());noteColor=Theme.Amber;}
             Theme.Lines(g,note,12,noteColor,new Rectangle(31,_noteTop+y,w-60,72));
             string footer=Strings.T(_recipe.IsFromCamera
-                ?"Read from your camera's settings file. Only what that file stores is shown; ISO, WB shift and exposure are not in it and stay unspecified."
+                ?"Read from your camera's settings file. Only the fields we have identified in it are shown; ISO, WB shift and exposure are not among them and stay unspecified."
                 :_recipe.IsVideo
                 ?"Movie recipe. The X-T30 keeps its movie image settings in its own menus, not in the C1-C7 banks and not in the settings file, so this one is set by hand on the camera."
                 :_recipe.IsImported

@@ -400,8 +400,12 @@ namespace Xt30Probe.AppModel
             foreach (string key in new string[] { "WB Shift R", "WB Shift B" })
                 if (recipe.Get(key) != "Not specified" && recipe.Get(key).Trim() != "0")
                     result.Skipped.Add(tag + key + " (the X-T30 cannot store it per bank — carried in the bank name, set it by hand)");
+            // La notice du X-T30 indique que la banque retient bien l'ISO et le
+            // réglage N&B. Nous n'avons simplement pas identifié leur position dans
+            // le fichier : dire « non stocké » serait faux, on dit ce qu'on sait.
             foreach (string key in new string[] { "ISO", "Monochromatic Color" })
-                if (recipe.Get(key) != "Not specified") result.Skipped.Add(tag + key + " (not stored in the camera settings file — set it by hand)");
+                if (recipe.Get(key) != "Not specified")
+                    result.Skipped.Add(tag + key + " (the bank holds it, but its position in the settings file is not identified yet — set it by hand)");
         }
 
         static void Put(byte[] blob, int offset, int value, string label, PatchResult result)

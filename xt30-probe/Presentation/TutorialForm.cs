@@ -32,7 +32,7 @@ namespace Xt30Probe.Presentation
                 "In Camera Slots, press \"Load recipes into C1-C7…\", pick a recipe per bank and send.\n\n"
                 + "All seven banks travel in a single file, so the camera is updated in one restore. Banks you leave unchanged, and every other camera setting, are untouched."),
             new Step("Lock", "5 · What the camera cannot store",
-                "The camera's settings file has no room for ISO, for the white balance shift, or for a few values with no verified code.\n\n"
+                "A few values do not travel: the white balance shift, which the camera does not keep per bank, and settings whose position in the settings file has not been identified yet, such as ISO.\n\n"
                 + "The application never invents them: it lists them after each send so you can set them in the camera menu. The white balance shift is written into the bank name instead, which is why names look like \"PACIFIC R+1 B-3\".\n\n"
                 + "Keep your original settings file: it restores the camera exactly as it was."),
         };
